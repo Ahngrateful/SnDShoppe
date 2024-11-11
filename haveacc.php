@@ -1,4 +1,5 @@
 <?php
+session_start(); // Start the session at the beginning
 
 $servername = "localhost";
 $dbname = "db_sdshoppe";
@@ -11,6 +12,7 @@ if ($conn->connect_error) {
 }
 
 $message = "";
+
 if (isset($_POST['login'])) {
     $email = $_POST['email'];
     $password1 = $_POST['psw']; 
@@ -25,6 +27,10 @@ if (isset($_POST['login'])) {
 
         if (isset($row['PASSWORD'])) {
             if ($password1 === $row['PASSWORD']) {
+                // Set session variables for user ID and email
+                $_SESSION['user_id'] = $row['ID'];
+                $_SESSION['user_email'] = $row['EMAIL'];
+                
                 header("Location: homepage.php");
                 exit; 
             } else {
@@ -33,7 +39,6 @@ if (isset($_POST['login'])) {
         }
     } else {
         $message = "Create an account first.";
-    
     }
 
     $stmt->close();
@@ -401,7 +406,7 @@ if (isset($_POST['login'])) {
         margin: 0;
         width: 100%;
         padding: 0;
-        background-color: #FFF9E6; 
+        background-image:url(images/bgLogin.png); 
     }
 
     .containerlogin {
@@ -456,8 +461,8 @@ if (isset($_POST['login'])) {
 
     .input-container input[type="password"] {
         width: 100%;
-        padding: 12px; /* Space for icon */
-        padding-right: 40px; /* Space for the icon on the right */
+        padding: 12px; 
+        padding-right: 40px; 
         background-color: #ccc;
         border: none;
         border-radius: 5px;
@@ -466,12 +471,12 @@ if (isset($_POST['login'])) {
         }
 
     .input-container i {
-        position: absolute; /* Positions the icon inside the input */
-        right: 10px; /* Distance from the right edge */
-        top: 50%; /* Center vertically */
-        transform: translateY(-50%); /* Adjusts to truly center */
-        cursor: pointer; /* Changes cursor to pointer on hover */
-        color: #333; /* Color of the icon */
+        position: absolute; 
+        right: 10px; 
+        top: 50%; 
+        transform: translateY(-50%); 
+        cursor: pointer; 
+        color: #333; 
     }
 
 
@@ -564,7 +569,7 @@ if (isset($_POST['login'])) {
         <form action="" method="POST">
             <h1>Login</h1>
             <p>New to S&D Shop? 
-                <a href="loginP.php">Sign Up</a>
+                <a href="sndLandingpage.php">Sign Up</a>
             </p>
 
             <label for="email">Email</label>
@@ -576,8 +581,8 @@ if (isset($_POST['login'])) {
                     <i class="far fa-eye" id="togglePassword"></i> <!-- Eye icon inside input -->
                 </div>
             <label>
-            <input type="checkbox" checked="checked" name="remember" style="margin-bottom: 15px"/> Remember me </label>
-            <a href="#" class="forgot-password">  Forgot Password<br></a>
+            <!--<input type="checkbox" checked="checked" name="remember" style="margin-bottom: 15px"/> Remember me </label> -->
+            <a href="forgot_pass.php" class="forgot-password">  Forgot Password<br></a>
          <!--  <p>
             <Br>By creating an account you agree to our
             <a href="#">Terms & Privacy</a>.
