@@ -1,6 +1,7 @@
 <?php
 session_start();
 
+
 $servername = "localhost";
 $dbname = "db_sdshoppe";
 $username = "root";  
@@ -378,7 +379,7 @@ h2 {
                                 <hr class="dropdown-divider">
                             </li>
                             <li>
-                                <a class="dropdown-item text-danger" href="haveacc.php">Logout</a>
+                                <a class="dropdown-item text-danger" href="logout.php">Logout</a>
                             </li>
                         </ul>
                     </li>
