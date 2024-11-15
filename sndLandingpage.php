@@ -1,14 +1,17 @@
 <?php
-//database
+// Start session and initialize database connection
 session_start();
 $servername = "localhost";
 $dbname = "db_sdshoppe";
 $username = "root";  
 $password = "";  
 
-$conn = new mysqli($servername, $username, $password, $dbname);
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
+try {
+    // Initialize PDO connection
+    $pdo = new PDO("mysql:host=$servername;dbname=$dbname", $username, $password);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch (PDOException $e) {
+    die("Database connection failed: " . $e->getMessage());
 }
 
 if(isset($_POST['continue'])) {
@@ -16,25 +19,37 @@ if(isset($_POST['continue'])) {
         $firstname = $_POST['firstname'];
         $lastname = $_POST['lastname'];
 
-        $stmt = $conn->prepare("INSERT INTO users_credentials (FIRSTNAME, LASTNAME) VALUES (?, ?)");
-        $stmt->bind_param("ss", $firstname, $lastname);  // "ss" means two string parameters
-        
+        // Use PDO to prepare and execute the statement
+        $stmt = $pdo->prepare("INSERT INTO users_credentials (FIRSTNAME, LASTNAME) VALUES (:firstname, :lastname)");
+        $stmt->bindParam(':firstname', $firstname);
+        $stmt->bindParam(':lastname', $lastname);
+
         if ($stmt->execute()) {
-            $user_id = $conn->insert_id;  
+            $user_id = $pdo->lastInsertId();  
             $_SESSION['user_id'] = $user_id;  
 
             header("Location: SignUp.php");
             exit();
-            //echo "<script>window.location.href = 'SignUp.php?';</script>";
         } else {
-            echo "Error: " . $stmt->error;
+            echo "Error: " . $stmt->errorInfo()[2];
         }
-
-        $stmt->close();
-    }    
+    }  
 }
 
-$conn->close();
+$stmt = $pdo->prepare('SELECT product_id, product_image, product_name, category FROM products GROUP BY category');
+$stmt->execute();
+$product = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+/*  To go to category pages kaso nageerror pa toh
+if (isset($_GET['category'])) {
+    $category = htmlspecialchars($_GET['category']);
+    // Fetch and display products for this category from your database
+    echo "<h1>Products in " . $category . " category</h1>";
+    // Your product fetching logic here
+} else {
+    echo "Category not specified.";
+} */
+
 ?>
 
 <!DOCTYPE html>
@@ -48,415 +63,430 @@ $conn->close();
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <title>S&D FABRIC SHOPPE</title>
     <link rel="icon" href="Assets/sndlo.ico">
-    <link rel="stylesheet" ">
-    <style>
-@import url('https://fonts.googleapis.com/css2?family=Kumbh+Sans:wght@100..900&family=Playfair+Display+SC:ital,wght@0,400;0,700;0,900;1,400;1,700;1,900&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900&display=swap');
-
-body{
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    background-color: #FFF9E6; 
-    font-family: "Playfair Display", serif;
-    overflow-x: hidden;
-    overflow-y: auto;
-}
-/* NAVBAR */
-.nav-link-black {
-    color: #1e1e1e !important;
-}
-.nav-link-black:hover {
-    color: #e044a5;
-}
-/* Hamburger icon color */
-.navbar-toggler-icon {
-    background-image: url("data:image/svg+xml;charset=utf8,%3Csvg viewBox='0 0 30 30' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath stroke='rgba(30, 30, 30, 1)' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3E%3C/svg%3E");
-}
-.search-bar {
-    max-width: 300px; 
-    width: 100%; 
-}
-.input-group-text {
-    background-color: #f1e8d9; 
-    border: 1px solid #d9b65d; 
-    border-radius: 20px 0 0 20px; 
-}
-.form-control {
-    border: 1px solid #d9b65d;
-    border-radius: 0 20px 20px 0; 
-    text-align: center; 
-}
-
-/* ACCOUNT DROPDOWN */
-.navbar .dropdown-menu {
-    border-radius: 8px;
-    padding: 0;
-    min-width: 150px;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
-}
-
-/* Account Dropdown Styling */
-.navbar .dropdown-menu {
-    border-radius: 11px; 
-    padding: 0;
-    min-width: 150px;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
-    overflow: hidden; 
-}
-
-/* Dropdown Item Styling */
-.navbar .dropdown-item {
-    padding: 10px 16px;
-    font-size: 14px;
-    color: #1e1e1e;
-    transition: background-color 0.3s;
-}
-
-/* Hover Effect with Matching Border Radius */
-.navbar .dropdown-item:hover {
-    background-color: #f1e8d9;
-    border-radius: 0;
-}
-
-/* Logout Text */
-.dropdown-item.text-danger {
-    color: #bc9c22;
-    font-weight: bold;
-}
-
-/* Dropdown Divider */
-.dropdown-divider {
-    margin: 0;
-}
-
-/* WELCOME/INTRO */
-
-.welcome-row{
-    display: flex; 
-    gap: 30px;
-    margin-top: -3px;
-    transition-duration: 0.7s;
-    max-width: autp;
-    justify-items: center;
-    align-content: center;
-}
-.col-1{
-    width: 710px;
-    padding-left: 75px;
-    padding-top: 35px; 
-}
-.col-2{ 
-    align-items: center;
-    margin-left: 30px;
-    width: auto;
-}
-.col-2 img{
-    width: 710px;
-    padding-top: 60px;
-}
-.col-1 h1{
-    font-size: 53px;
-    font-family: "Playfair Display SC", serif;
-    padding-top: 90px;
-    text-shadow: 1px 1px 20px #7c7c7c;
-}
-summary{
-    font-size: 19px;
-}
-.col-1 button{
-    display: inline-block;
-    background:#bc9c22;
-    color: #fff;
-    padding: 8px 30px;
-    border-radius: 20px;
-    align-self: center;
-    font-size: 20px;
-    border: none;
-    transition-duration: 0.4s;
-    margin-left: 200px;
-    margin-top: 50px;
-}
-.col-1 button:hover{
-    background: #6d4a25;
-    color: #fff;
-}
-.header{
-    background: radial-gradient(#fff,#F9F9D5);
-    /*background: #313131 url(images/bgLogin.png) left center/contain no-repeat padding-box; */
     
-}
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Kumbh+Sans:wght@100..900&family=Playfair+Display+SC:ital,wght@0,400;0,700;0,900;1,400;1,700;1,900&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900&display=swap');
 
-/* CATEGORIES */
-.categories{ 
-    margin: 10px auto;
-    width: 100%;
-    margin-top: 110px;
-    align-items: center;
-}
-.categories h1{
-    align-items: center;
-}
-.available-row{
-    gap: 40px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    vertical-align: middle;
-    width: 100%;
-}
-.available-row a{
-    font-size: 20px;
-    text-decoration: none;
-    padding: 15px;
-    color: #bc9c22;
-    transition-duration: 0.4s;
-}
-.available-row a:hover{
-    color: #FFF9E6;
-    background-color: #bc9c22;
-    padding: 15px;
-    font-size: 20px;
-    border-radius: 5px;
-}
-.available-col{
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 20px;
-}
-.available-col a{
-    font-size: 25px;
-    padding: 10px;
-    color: #1e1e1e;
-}
-.available-row h2{
-    font-size: 45px;
-    padding: 20px;
-    margin-top: 10px;
-    font-family: "Playfair Display SC", serif;
-    text-shadow: 1px 1px 20px #7c7c7c;
-}
-.row {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 100px;
-}
-.categories-col {
-    flex-basis: 20%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    border-radius: 5px;
-    border: 1px solid #7c7c7c;
-    box-shadow: 0.5px 0.5px 5px #7c7c7c;
-}
-.categories-col img{
-    width: 100%;
-    height: 100%;
-}
-.row a{
-    padding: 15px;
-    margin-top: -30px;
-    font-size: 25px;
-    font-weight: bold;
-    text-decoration: none;
-    color: #6d4a25;
-    transition-duration: 0.3s;
-}
-.row a:hover{
-    text-decoration: underline #bc9c22;
-    color: #bc9c22;
-}
-.row p{
-    padding-bottom: 20px;
-}
-.btn1{
-    display: inline-block;
-    background:#bc9c22;
-    color: #fff;
-    padding: 8px 10px;
-    border-radius: 10px;
-    align-self: center;
-    font-size: 20px;
-    border: none;
-    transition-duration: 0.4s;
-}
-.btn1:hover{
-    background: #6d4a25;
-    color: #fff;
-}
+        body{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            background-color: #FFF9E6; 
+            font-family: "Playfair Display", serif;
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+        /* NAVBAR */
+        .nav-link-black {
+            color: #1e1e1e !important;
+        }
+        .nav-link-black:hover {
+            color: #e044a5;
+        }
+        /* Hamburger icon color */
+        .navbar-toggler-icon {
+            background-image: url("data:image/svg+xml;charset=utf8,%3Csvg viewBox='0 0 30 30' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath stroke='rgba(30, 30, 30, 1)' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3E%3C/svg%3E");
+        }
+        .search-bar {
+            max-width: 300px; 
+            width: 100%; 
+        }
+        .input-group-text {
+            background-color: #f1e8d9; 
+            border: 1px solid #d9b65d; 
+            border-radius: 20px 0 0 20px; 
+        }
+        .form-control {
+            border: 1px solid #d9b65d;
+            border-radius: 0 20px 20px 0; 
+            text-align: center; 
+        }
 
-/* ABOUT US */
-.aboutUs{
-    display: flex;
-    justify-content: center;
-    justify-items: center;
-    align-content: center;
-    margin-top: 50px;
-}
-.pic-abt img{
-    height: 650px;
-    margin-top: 80px;
-}
-.content-abt{
-    width: 45%;
-    height: auto;
-    flex-direction: column;
-    justify-items: center;
-    align-content: center;
-    margin-top: 80px;
-}
-.abt1{
-    justify-items: center;
-    padding: 20px;
-    width: 90%;
-    text-align: center;
-    background: #2E2E31;
-    border-radius: 5px;
-    box-shadow: 1px 1px 10px #7c7c7c;
-}
-.abt1 h1{
-    color: #bc9c22;
-    font-size: 50px;
-    text-shadow: 1px 1px 25px rgb(32, 32, 32);
-}
-.abt1 strong{
-    font-size: 25px;
-    color: #FFF9E6;
-    text-shadow: 1px 1px 15px rgb(32, 32, 32);
-}
-.abt1 cite{
-    font-size: 15px;
-    color: white;
-    text-shadow: 1px 1px 15px rgb(32, 32, 32);
-}
-.abt1 button{
-    display: inline-block;
-    background:#bc9c22;
-    color: #fff;
-    padding: 8px 30px;
-    border-radius: 10px;
-    align-self: center;
-    font-size: 20px;
-    transition-duration: 0.4s;
-}
-.abt1 button:hover{
-    background: #6d4a25;
-    color: #fff;
-}
-.abt2{
-    justify-items: center;
-    padding: 20px;
-    text-align: center;
-    width: 90%;
-    margin-top: 30px;
-    border: 1px solid #1e1e1e;
-    border-radius: 5px;
-    box-shadow: 1px 1px 5px #7c7c7c;
-}
-.abt2 h1{
-    color: #1e1e1e;
-    font-size: 40px;
+        /* ACCOUNT DROPDOWN */
+        .navbar .dropdown-menu {
+            border-radius: 8px;
+            padding: 0;
+            min-width: 150px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+        }
 
-}
-.contact-item svg{
-    width: 25px;
-    margin-right: 5px;
-    color: #bc9c22;
-}
-.contact-item a{
-    color: #bc9c22;
-}
-.contact-item a:hover{
-    color:#6d4a25;
-    text-decoration: underline #6d4a25;
-}
+        /* Account Dropdown Styling */
+        .navbar .dropdown-menu {
+            border-radius: 11px; 
+            padding: 0;
+            min-width: 150px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+            overflow: hidden; 
+        }
 
-/* PRE-SIGN UP */
-.presignup {
-    display: flex;
-    padding: 60px;
-    padding-top: 130px;
-    padding-bottom: 120px;
-    background-image: url(images/bgLogin.png);
-    height: auto; 
-    box-shadow: inset 0px 0px 10px #000000;
-    align-items: start;
-}
-.presignup-container {
-    background-color: #282727;
-    color: #fff;
-    padding: 30px;
-    border-radius: 5px;
-    box-shadow: 1px 1px 15px #7c7c7c;
-    height: auto;
-    width: 50%;
-    margin-left: 30px;
-    margin-top: auto;
-}
-.presignup-container img{
-    margin-bottom: 10px;
-}
-.presignup-container h2 {
-    text-align: center;
-    margin-bottom: 20px;
-    margin-top: 20px;
-}
+        /* Dropdown Item Styling */
+        .navbar .dropdown-item {
+            padding: 10px 16px;
+            font-size: 14px;
+            color: #1e1e1e;
+            transition: background-color 0.3s;
+        }
 
-.input-group {
-    margin-bottom: 15px;
-}
+        /* Hover Effect with Matching Border Radius */
+        .navbar .dropdown-item:hover {
+            background-color: #f1e8d9;
+            border-radius: 0;
+        }
 
-.input-group label {
-    display: block;
-    margin-bottom: 5px;
-}
+        /* Logout Text */
+        .dropdown-item.text-danger {
+            color: #bc9c22;
+            font-weight: bold;
+        }
 
-.input-group input {
-    width: 100%;
-    padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: 5px;   
-}
-.presignup-container a{
-    color: white;
-    text-decoration: none; 
-}
-.underline-link {
-    color: #bc9c22;
-    text-decoration: underline;
-}
-.underline-link:hover {
-    color: #f1e8d9;
-    text-decoration: underline;
-}
-.btn {
-    width: 25%;
-    padding: 10px;
-    background-color: #282727;
-    color: white;
-    border: 2px solid #000000; 
-    border-radius: 5px;
-    cursor: pointer;
-    margin-top: 7px;   
-}
-.btn:hover {
-    background-color: #bc9c22;       
-}
-.presignup-abt {
-    width: 60%;
-    display: flex;
-    flex-direction: column;
-}
-.presignup-abt h2 {
-    font-size: 50px;
-    text-align: center;
-    text-shadow: 1px 1px 10px #7c7c7c;
-    font-family: "Playfair Display SC", serif;
-    margin-top: 100px;
-}
-        </style>
+        /* Dropdown Divider */
+        .dropdown-divider {
+            margin: 0;
+        }
+
+        /* WELCOME/INTRO */
+
+        .welcome-row{
+            display: flex; 
+            gap: 30px;
+            margin-top: -3px;
+            transition-duration: 0.7s;
+            max-width: autp;
+            justify-items: center;
+            align-content: center;
+        }
+        .col-1{
+            width: 710px;
+            padding-left: 75px;
+            padding-top: 35px; 
+        }
+        .col-2{ 
+            align-items: center;
+            margin-left: 30px;
+            width: auto;
+        }
+        .col-2 img{
+            width: 710px;
+            padding-top: 60px;
+        }
+        .col-1 h1{
+            font-size: 53px;
+            font-family: "Playfair Display SC", serif;
+            padding-top: 90px;
+            text-shadow: 1px 1px 20px #7c7c7c;
+        }
+        summary{
+            font-size: 19px;
+        }
+        .col-1 button{
+            display: inline-block;
+            background:#bc9c22;
+            color: #fff;
+            padding: 8px 30px;
+            border-radius: 20px;
+            align-self: center;
+            font-size: 20px;
+            border: none;
+            transition-duration: 0.4s;
+            margin-left: 200px;
+            margin-top: 50px;
+        }
+        .col-1 button:hover{
+            background: #6d4a25;
+            color: #fff;
+        }
+        .header{
+            background: radial-gradient(#fff,#F9F9D5);
+            /*background: #313131 url(images/bgLogin.png) left center/contain no-repeat padding-box; */
+            
+        }
+
+        /* CATEGORIES */
+        .fabric-items {
+            display: flex;
+            flex-wrap: wrap; 
+            justify-content: center; 
+            padding: 10px;
+            max-width: 1000px; 
+            margin: 0 auto; 
+            gap: 20px;
+        }
+        .categories{ 
+            margin: 10px auto;
+            width: 100%;
+            margin-top: 110px;
+            align-items: center;
+        }
+        .categories h1{
+            align-items: center;
+        }
+        .available-row{
+            gap: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            vertical-align: middle;
+            width: 100%;
+        }
+        .available-row a{
+            font-size: 20px;
+            text-decoration: none;
+            padding: 15px;
+            color: #bc9c22;
+            transition-duration: 0.4s;
+        }
+        .available-row a:hover{
+            color: #FFF9E6;
+            background-color: #bc9c22;
+            padding: 15px;
+            font-size: 20px;
+            border-radius: 5px;
+        }
+        .available-col{
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        .available-col a{
+            font-size: 25px;
+            padding: 10px;
+            color: #1e1e1e;
+        }
+        .available-row h2{
+            font-size: 45px;
+            padding: 20px;
+            margin-top: 10px;
+            font-family: "Playfair Display SC", serif;
+            text-shadow: 1px 1px 20px #7c7c7c;
+        }
+        .row {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            padding: 20px;
+            margin-top: -26px;
+        }
+        .categories-col {
+            flex-basis: 20%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 5px;
+            border: 1px solid #7c7c7c;
+            box-shadow: 0.5px 0.5px 5px #7c7c7c;
+            height: auto;
+            padding: 10px;
+        }
+        .categories-col img{
+            width: 100%;
+            height: 100%;
+        }
+        .row p{
+            padding: 10px;
+            font-size: 20px;
+            font-weight: bold;
+            text-decoration: none;
+            color: #6d4a25;
+            transition-duration: 0.3s;
+            margin-top: 10px;
+            font-family: "Playfair Display SC", serif;
+            padding-bottom: 5px;
+            text-align: center;
+        }
+        .row p:hover{
+            text-decoration: underline #bc9c22;
+            color: #bc9c22;
+        }
+        .row a{
+            text-decoration: none;
+        }
+        .btn1{
+            display: inline-block;
+            background:#bc9c22;
+            color: #fff;
+            padding: 8px 10px;
+            border-radius: 10px;
+            align-self: center;
+            font-size: 20px;
+            border: none;
+            transition-duration: 0.4s;
+        }
+        .btn1:hover{
+            background: #6d4a25;
+            color: #fff;
+        }
+
+        /* ABOUT US */
+        .aboutUs{
+            display: flex;
+            justify-content: center;
+            justify-items: center;
+            align-content: center;
+            margin-top: 50px;
+        }
+        .pic-abt img{
+            height: 650px;
+            margin-top: 80px;
+        }
+        .content-abt{
+            width: 45%;
+            height: auto;
+            flex-direction: column;
+            justify-items: center;
+            align-content: center;
+            margin-top: 80px;
+        }
+        .abt1{
+            justify-items: center;
+            padding: 20px;
+            width: 90%;
+            text-align: center;
+            background: #2E2E31;
+            border-radius: 5px;
+            box-shadow: 1px 1px 10px #7c7c7c;
+        }
+        .abt1 h1{
+            color: #bc9c22;
+            font-size: 50px;
+            text-shadow: 1px 1px 25px rgb(32, 32, 32);
+        }
+        .abt1 strong{
+            font-size: 25px;
+            color: #FFF9E6;
+            text-shadow: 1px 1px 15px rgb(32, 32, 32);
+        }
+        .abt1 cite{
+            font-size: 15px;
+            color: white;
+            text-shadow: 1px 1px 15px rgb(32, 32, 32);
+        }
+        .abt1 button{
+            display: inline-block;
+            background:#bc9c22;
+            color: #fff;
+            padding: 8px 30px;
+            border-radius: 10px;
+            align-self: center;
+            font-size: 20px;
+            transition-duration: 0.4s;
+        }
+        .abt1 button:hover{
+            background: #6d4a25;
+            color: #fff;
+        }
+        .abt2{
+            justify-items: center;
+            padding: 20px;
+            text-align: center;
+            width: 90%;
+            margin-top: 30px;
+            border: 1px solid #1e1e1e;
+            border-radius: 5px;
+            box-shadow: 1px 1px 5px #7c7c7c;
+        }
+        .abt2 h1{
+            color: #1e1e1e;
+            font-size: 40px;
+
+        }
+        .contact-item svg{
+            width: 25px;
+            margin-right: 5px;
+            color: #bc9c22;
+        }
+        .contact-item a{
+            color: #bc9c22;
+        }
+        .contact-item a:hover{
+            color:#6d4a25;
+            text-decoration: underline #6d4a25;
+        }
+
+        /* PRE-SIGN UP */
+        .presignup {
+            display: flex;
+            padding: 60px;
+            padding-top: 130px;
+            padding-bottom: 120px;
+            background-image: url(PIC/bgLogin.png);
+            height: auto; 
+            box-shadow: inset 0px 0px 10px #000000;
+            align-items: start;
+        }
+        .presignup-container {
+            background-color: #282727;
+            color: #fff;
+            padding: 30px;
+            border-radius: 5px;
+            box-shadow: 1px 1px 15px #7c7c7c;
+            height: auto;
+            width: 50%;
+            margin-left: 30px;
+            margin-top: auto;
+        }
+        .presignup-container img{
+            margin-bottom: 10px;
+        }
+        .presignup-container h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            margin-top: 20px;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;   
+        }
+        .presignup-container a{
+            color: white;
+            text-decoration: none; 
+        }
+        .underline-link {
+            color: #bc9c22;
+        }
+        .underline-link:hover {
+            text-decoration: underline;
+        }
+        .btn {
+            width: 25%;
+            padding: 10px;
+            background-color: #282727;
+            color: white;
+            border: 2px solid #000000; 
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 7px;   
+        }
+        .btn:hover {
+            background-color: #bc9c22;       
+        }
+        .presignup-abt {
+            width: 60%;
+            display: flex;
+            flex-direction: column;
+        }
+        .presignup-abt h2 {
+            font-size: 50px;
+            text-align: center;
+            text-shadow: 1px 1px 10px #7c7c7c;
+            font-family: "Playfair Display SC", serif;
+            margin-top: 100px;
+        }
+    </style>
+    
 </head>
 <body>
     <!-- Navbar -->
@@ -470,17 +500,18 @@ summary{
                 <span class="navbar-toggler-icon"></span>
             </button>
 
+            <!-- idk the function so remove ko muna for the meantime
             <div class="collapse navbar-collapse" id="navbarTogglerDemo01">
                 <div class="mx-auto d-flex justify-content-center flex-grow-1">
-                    <form class="search-bar" role="search">
+                    <form class="search-bar" name="search" role="search" method="POST" action="">
                         <div class="input-group">
-                            <span class="input-group-text" id="basic-addon1">
+                            <span class="input-group-text" name="search" id="basic-addon1">
                                 <i class="bi bi-search search-icon"></i>
                             </span>
                             <input class="form-control" type="search" placeholder="Search..." aria-label="Search" aria-describedby="basic-addon1">
                         </div>
                     </form>
-                </div>
+                </div> -->
 
                 <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
                     <li class="nav-item">
@@ -506,12 +537,13 @@ summary{
                             <img src="Assets/svg(icons)/account_circle.svg" alt="account">
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="accountDropdown">
-                            <li>
+                            <!--inalis ko yung settings-->
+                            <!--<li>
                                 <a class="dropdown-item" href="settings.html">Settings</a>
                             </li>
                             <li>
                                 <hr class="dropdown-divider">
-                            </li>
+                            </li> -->
                             <li>
                                 <a class="dropdown-item text-danger" href="haveacc.php">Login</a>
                             </li>
@@ -527,7 +559,7 @@ summary{
         <div class="col-1">
             <h1>Where Quality Fabrics<br>Meet Creativity</h1>
             <summary style="list-style-type: none;font-weight: lighter;">Discover a world of premium fabrics tailored to inspire your creative journey. Whether you’re crafting clothing, home décor, or unique accessories, we’re here to provide the finest materials to bring your ideas to life.</summary>
-            <form action="homepage.html">
+            <form action="homepage.php">
                 <button type="submit">Explore Now!</button>
             </form>
         </div>
@@ -543,53 +575,35 @@ summary{
         </div>
 
         <div class="available-row" style="margin-bottom: 20px; margin-top: 20px;">
+            <a href="homepage.php">All Fabrics</a>
             <a href="url">New Arrivals</a>
             <a href="url">Popular</a>
-            <a href="url">Order Here</a>
         </div>
 
         <div class="row">
-            <div class="categories-col">
-                <img src="Assets/fabrics-edited/design1.png">
-                <a href="url">Beaded Lace</a>
-                <p>info info info</p>
-            </div>
-            <div class="categories-col">
-                <img src="Assets/fabrics-edited/design2.png">
-                <a href="url">Lace</a>
-                <p>info info info</p>
-            </div>
-            <div class="categories-col">
-                <img src="Assets/fabrics-edited/design3.png">
-                <a href="url">Satin</a>
-                <p>info info info</p>
-            </div>
-        </div> 
 
-        <div class="row" style="margin-top: 50px;  padding-bottom: 50px;">
-            <div class="categories-col">
-                <img src="Assets/fabrics-edited/design4.png">
-                <a href="url">Sequence</a>
-                <p>info info info</p>
-            </div>
-            <div class="categories-col">
-                <img src="Assets/fabrics-edited/design5.png">
-                <a href="url">Silk</a>
-                <p>info info info</p>
-            </div>
-            <div class="categories-col">
-                <img src="Assets/fabrics-edited/design6.png">
-                <a href="url">Velvet</a>
-                <p>info info info</p>
-            </div>
-        
+            <?php 
+            $count = 0;
+            foreach ($product as $item):    
+                if ($count >= 4) break;
+            ?>
+                <div class="categories-col">
+                    <a href="haveacc.php?category=<?= urlencode($item['category']) ?>">
+                        <img src="<?= htmlspecialchars($item['product_image']) ?>" alt="Fabric Image" >
+                        <p><?= htmlspecialchars($item['category']) ?></p>
+                    </a>
+                </div>
+            <?php 
+                $count++;
+            endforeach; 
+            ?>
+    
         </div> 
     </div>
 
     <!--ABOUT US-->
     
-    
-    <div class="aboutUs" style="background: linear-gradient(180deg, rgba(234,217,149,0.6694327389158788) -84%, rgba(255,255,255,0) 100%); height: auto; box-shadow: -1px -4px 5px rgba(0, 0, 0, 0.15); ">
+    <div class="aboutUs" style="background: linear-gradient(180deg, rgba(234,217,149,0.6694327389158788) -84%, rgba(255,255,255,0) 100%); height: auto; box-shadow: -1px -4px 5px rgba(0, 0, 0, 0.15);">
         <div class="pic-abt">
             <img src="Assets/aboutUs-pic.png">
         </div>
@@ -599,7 +613,7 @@ summary{
                 <strong>From Classic to Trendy, We Have the<br>Fabric You Need!</strong>
                 <cite><br>Lorem ipsum dolor sit amet. Ad architecto iusto ut quasi voluptatum<br> in maiores ipsum. Qui illum enim et quaerat velit quo temporibus<br> aperiam et consectetur modi et cupiditate numquam ex expedita omnis.
                 <br><br></cite>
-                <form action="homepage.html">
+                <form action="haveacc.php">
                     <button type="submit">Shop Now!</button>
                 </form>
             </div>
@@ -641,7 +655,7 @@ summary{
             
             <button type="submit" class="btn" name="continue" required>Register Now</button></br></br>
                         
-                <a href="haveacc.php">HAVE AN ACCOUNT?<span class="underline-link"><br>LOGIN HERE</span> </a> 
+                <a href="Login.html">HAVE AN ACCOUNT?<span class="underline-link"><br>LOGIN HERE</span> </a> 
             </form>
         </div>
         <div class="presignup-abt">
