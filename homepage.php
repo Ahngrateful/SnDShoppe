@@ -27,10 +27,13 @@ $user_email = $_SESSION['user_email'];
 
 
 // Get the 4 most recently added products
+$stmtCategory = $pdo->prepare('SELECT product_id, product_image, product_name, category FROM products GROUP BY category');
+$stmtCategory->execute();
+$category = $stmtCategory->fetchAll(PDO::FETCH_ASSOC);
+
 $stmt = $pdo->prepare('SELECT product_id, product_image, product_name, category FROM products');
 $stmt->execute();
 $product = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
 
 ?>
 
@@ -85,8 +88,13 @@ body {
     background-image: url("data:image/svg+xml;charset=utf8,%3Csvg viewBox='0 0 30 30' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath stroke='rgba(30, 30, 30, 1)' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3E%3C/svg%3E");
 }
 
+.navbar-collapse {
+    display: flex;
+    justify-content: center; /* Center aligns the entire navbar content */
+}
+
 .search-bar {
-    max-width: 300px; 
+    max-width: 500px; 
     width: 100%; 
 }
 
@@ -211,6 +219,7 @@ h2 {
     margin-top: 5px; 
     font-weight: bold;
     font-size: 16px; 
+    font-family: "Playfair Display SC", serif;
 }
 
 /* Responsive adjustments */
@@ -336,17 +345,17 @@ h2 {
                 <span class="navbar-toggler-icon"></span>
             </button>
 
-            <div class="collapse navbar-collapse" id="navbarTogglerDemo01">
-                <div class="mx-auto d-flex justify-content-center flex-grow-1">
-                    <form class="search-bar" role="search">
-                        <div class="input-group">
-                            <span class="input-group-text" id="basic-addon1">
-                                <i class="bi bi-search search-icon"></i>
-                            </span>
-                            <input class="form-control" type="search" placeholder="Search..." aria-label="Search" aria-describedby="basic-addon1">
-                        </div>
-                    </form>
-                </div>
+            <div class="collapse navbar-collapse justify-content-center" id="navbarTogglerDemo01">
+                <form class="search-bar" name="search" role="search" method="POST" action="search_landing.php">
+                    <div class="input-group">
+                        <span class="input-group-text" id="basic-addon1">
+                            <i class="bi bi-search search-icon"></i>
+                        </span>
+                        <input class="form-control" type="search" name="search_term" placeholder="Search..." aria-label="Search" aria-describedby="basic-addon1">
+                        <button type="submit" name="search" style="display:none;"></button>
+                    </div>
+                </form>
+            </div>
 
                 <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
                     <li class="nav-item">
@@ -390,25 +399,32 @@ h2 {
 
     <!-- Category Card -->
     <div class="category-card p-4">
-        <div class="row justify-content-center">
+    <div class="row justify-content-center" style="margin-top: 75px;">
         <h2 class="text-center mb-4">Category</h2>
-            <?php 
+        <?php 
+        if (!empty($category)) {
             $count = 0;
-            foreach ($product as $item):    
+            foreach ($category as $item):    
                 if ($count >= 4) break;
-            ?>
-                <div class="category col-4 col-md-2 text-center">
-                    <a href="#">
-                        <img src="<?= htmlspecialchars($item['product_image']) ?>" alt="Fabric Image" class="rounded-circle">
-                    </a>
-                    <p><?= htmlspecialchars($item['category']) ?></p>
-                </div>
-            <?php 
+                
+                $categoryName = htmlspecialchars($item['category']);
+                $productImage = htmlspecialchars($item['product_image']);
+        ?>
+            <div class="category col-4 col-md-2 text-center">
+                <a href="search_landing.php?category=<?= urlencode($categoryName) ?>">
+                    <img src="<?= $productImage ?>" alt="Fabric Image" class="rounded-circle">
+                </a>
+                <p><?= $categoryName ?></p>
+            </div>
+        <?php 
                 $count++;
             endforeach; 
-            ?>
-        </div>
+        } else {
+            echo "<p>No categories found.</p>";
+        }
+        ?>
     </div>
+</div>
                 
     
     <!-- Filter Buttons -->
