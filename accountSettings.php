@@ -22,7 +22,7 @@ if ($conn->connect_error) {
 
 // Fetch user profile data
 $profile_data = [];
-$stmt = $conn->prepare("SELECT firstname, lastname, email, phone, gender, birthdate FROM users_credentials WHERE id = ?");
+$stmt = $conn->prepare("SELECT firstname, lastname, email, phone, gender, birthdate, address FROM users_credentials WHERE id = ?");
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
 $result = $stmt->get_result();
@@ -75,10 +75,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save_profile'])) {
     $email = $_POST['email'];
     $phone = $_POST['phone'];
     $birthdate = $_POST['birthdate'];
+    $address = $_POST['address'];
 
     // Update profile data in the database
-    $stmt = $conn->prepare("UPDATE users_credentials SET firstname = ?, lastname = ?, email = ?, phone = ?, birthdate = ? WHERE id = ?");
-    $stmt->bind_param("sssssi", $firstname, $lastname, $email, $phone, $birthdate, $user_id);
+    $stmt = $conn->prepare("UPDATE users_credentials SET firstname = ?, lastname = ?, email = ?, phone = ?, birthdate = ?, address = ? WHERE id = ?");
+    $stmt->bind_param("ssssssi", $firstname, $lastname, $email, $phone, $birthdate, $address, $user_id);
 
     if ($stmt->execute()) {
         $message = "<div class='alert alert-success'>Profile updated successfully.</div>";
@@ -98,20 +99,172 @@ $conn->close();
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="\SnD_Shoppe-main\css\accountSettings.css">
+    <link rel="stylesheet">
     <link rel="icon" href="/SnD_Shoppe-main/PIC/sndlogo.png" type="image/png">
     <title>S&D Fabrics</title>
-    <script>
-        function toggleEdit() {
-    // Toggle between hiding and showing the profile-view and profile-edit sections
-        var editSection = document.getElementById('profile-edit');
-        if (editSection.style.display === 'none' || editSection.style.display === '') {
-            editSection.style.display = 'block';
-        } else {
-            editSection.style.display = 'none';
-        }
-    }
-        </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Kumbh+Sans:wght@100..900&family=Playfair+Display+SC:ital,wght@0,400;0,700;0,900;1,400;1,700;1,900&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900&display=swap');
+
+body {
+    background: url(/Assets/images/bgLogin.png) rgba(0, 0, 0, 0.3);
+    background-blend-mode: multiply;
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    min-height: 100vh; 
+    overflow-y: auto; 
+    margin: 0; 
+    padding: 0; 
+}
+    
+.navbar {
+    position: fixed; 
+    top: 0; 
+    left: 0; 
+    right: 0; 
+    z-index: 1000; 
+    background-color: #f1e8d9; 
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15); 
+}
+
+.nav-link-black {
+    color: #1e1e1e !important;
+}
+
+.nav-link-black:hover {
+    color: #e044a5;
+}
+
+
+/* Hamburger icon color */
+.navbar-toggler-icon {
+    background-image: url("data:image/svg+xml;charset=utf8,%3Csvg viewBox='0 0 30 30' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath stroke='rgba(30, 30, 30, 1)' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3E%3C/svg%3E");
+}
+
+.search-bar {
+    max-width: 300px; 
+    width: 100%; 
+}
+
+.input-group-text {
+    background-color: #f1e8d9; 
+    border: 1px solid #d9b65d; 
+    border-radius: 20px 0 0 20px; 
+}
+
+.form-control {
+    border: 1px solid #d9b65d;
+    border-radius: 0 20px 20px 0; 
+    text-align: center; 
+}
+
+h1{
+    font-family: "Playfair Display SC", serif;
+    font-size: 50px;
+    color: #1e1e1e;
+}
+
+/* Account Dropdown Styling */
+.navbar .dropdown-menu {
+    border-radius: 8px;
+    padding: 0;
+    min-width: 150px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+}
+
+/* Account Dropdown Styling */
+.navbar .dropdown-menu {
+    border-radius: 11px; 
+    padding: 0;
+    min-width: 150px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+    overflow: hidden; 
+}
+
+/* Dropdown Item Styling */
+.navbar .dropdown-item {
+    padding: 10px 16px;
+    font-size: 14px;
+    color: #1e1e1e;
+    transition: background-color 0.3s;
+}
+
+/* Hover Effect with Matching Border Radius */
+.navbar .dropdown-item:hover {
+    background-color: #f1e8d9;
+    border-radius: 0;
+}
+
+/* Logout Text */
+.dropdown-item.text-danger {
+    color: #dc3545;
+    font-weight: bold;
+}
+
+/* Dropdown Divider */
+.dropdown-divider {
+    margin: 0;
+}
+
+/* Sidebar Styles */
+#sidebar {
+    background-color: #343a40; 
+    color: #f1e8d9; 
+}
+
+#sidebar .nav-link {
+    color: #f1e8d9; 
+}
+
+#sidebar .nav-link:hover {
+    background-color: #e0cbab; 
+    color: #1e1e1e;
+}
+
+#sidebar .nav-link.custom-active {
+    background-color: #f1e8d9 !important; 
+    color: #1e1e1e !important; 
+}
+
+/* Active Link Style for Sidebar */
+#sidebar .nav-link.active {
+    background-color: #e0cbab; 
+    color: #1e1e1e !important; 
+}
+
+/* General Styles */
+h1 {
+    font-family: "Playfair Display SC", serif;
+    font-size: 50px;
+    color: #1e1e1e;
+}
+
+.table-striped tbody tr:nth-of-type(odd) {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.card {
+    border: none;
+    border-radius: 10px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.rect-form-control {
+    border-radius: 0 !important; 
+}
+
+/* Custom button color for gray buttons */
+.btn-gray {
+    background-color: #7a7a7a; 
+    border: none; 
+    color: white; 
+}
+
+.btn-gray:hover {
+    background-color: white; 
+}
+
+    </style>
 </head>
 <body class="vh-100">
     <!-- Navbar -->
@@ -125,17 +278,6 @@ $conn->close();
                 <span class="navbar-toggler-icon"></span>
             </button>
 
-            <div class="collapse navbar-collapse" id="navbarTogglerDemo01">
-                <div class="mx-auto d-flex justify-content-center flex-grow-1">
-                    <form class="search-bar" role="search">
-                        <div class="input-group">
-                            <span class="input-group-text" id="basic-addon1">
-                                <i class="bi bi-search search-icon"></i>
-                            </span>
-                            <input class="form-control" type="search" placeholder="Search..." aria-label="Search" aria-describedby="basic-addon1">
-                        </div>
-                    </form>
-                </div>
 
                 <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
                     <li class="nav-item">
@@ -166,7 +308,7 @@ $conn->close();
                                 <hr class="dropdown-divider">
                             </li>
                             <li>
-                                <a class="dropdown-item text-danger" href="haveacc.php">Logout</a>
+                                <a class="dropdown-item text-danger" href="logout.php">Logout</a>
                             </li>
                         </ul>
                     </li>
@@ -185,7 +327,7 @@ $conn->close();
                 </a>
             </li>
             <li>
-                <a href="#" class="nav-link text-white">
+                <a href="cart.php" class="nav-link text-white">
                     <i class="bi bi-heart"></i> Saved Items
                 </a>
             </li>
@@ -215,6 +357,7 @@ $conn->close();
                     <p><strong>Phone Number:</strong> <?php echo htmlspecialchars($profile_data['phone']); ?> <a href="javascript:void(0);" onclick="toggleEdit()" class="link-primary">Change</a></p>
                     <p><strong>Gender:</strong> <?php echo htmlspecialchars($profile_data['gender']); ?></p>
                     <p><strong>Date of Birth:</strong> <?php echo htmlspecialchars($profile_data['birthdate']); ?> <a href="javascript:void(0);" onclick="toggleEdit()" class="link-primary">Change</a></p>
+                    <p><strong>Address:</strong> <?php echo htmlspecialchars($profile_data['address']); ?> <a href="javascript:void(0);" onclick="toggleEdit()" class="link-primary">Change</a></p>
                 </div>
             </div>
 
@@ -242,6 +385,10 @@ $conn->close();
                 <div class="mb-3">
                     <label for="birthdate" class="form-label">Date of Birth</label>
                     <input type="date" class="form-control" name="birthdate" value="<?php echo htmlspecialchars($profile_data['birthdate']); ?>" required>
+                </div>
+                <div class="mb-3">
+                    <label for="birthdate" class="form-label">Date of Birth</label>
+                    <input type="text" class="form-control" name="address" value="<?php echo htmlspecialchars($profile_data['address']); ?>" required>
                 </div>
                 <button type="submit" class="btn btn-success" name="save_profile">Save Changes</button>
                 <button type="button" class="btn btn-secondary" onclick="cancelEdit()">Cancel</button>
@@ -275,6 +422,16 @@ $conn->close();
             </div>
         </div>
     </div>
+    <script>
+function toggleEdit() {
+    // Show the edit mode and hide the regular profile view
+    document.getElementById("profile-edit").style.display = "block";
+}
 
+function cancelEdit() {
+    // Hide the edit mode and show the regular profile view
+    document.getElementById("profile-edit").style.display = "none";
+}
+</script>
 </body>
 </html>
