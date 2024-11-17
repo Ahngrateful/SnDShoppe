@@ -280,15 +280,27 @@ if (isset($_POST['cancel'])) {
             <p>By creating an account you agree to our <a href="#">Terms & Privacy</a>.</p>
 
             <div class="s_buttons">
-            <button type="submit" name="cancel" class="cancelbtn">Cancel</button>
+                <button type="button" class="cancelbtn" onclick="submitCancelForm()">Cancel</button>
                 <button type="submit" name="create" class="signupbtn">Sign Up</button>
             </div>
-
-            <input type="hidden" name="cancelHidden" id="cancelHidden" value="">
         </form>
     </div>
 </div>
 <script>
+    function submitCancelForm() {
+    // Add a hidden input field to indicate cancel action
+    const cancelInput = document.createElement('input');
+    cancelInput.type = 'hidden';
+    cancelInput.name = 'cancel';
+    cancelInput.value = '1';
+
+    // Append the hidden input to the form
+    const form = document.getElementById('signupForm');
+    form.appendChild(cancelInput);
+
+    // Submit the form programmatically
+    form.submit();
+}
 document.addEventListener('DOMContentLoaded', function() {
     // Password toggle visibility
     const togglePassword1 = document.querySelector('#togglePassword1');
