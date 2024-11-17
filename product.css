@@ -1,7 +1,89 @@
-@import url('https://fonts.googleapis.com/css2?family=Kumbh+Sans:wght@100..900&family=Playfair+Display+SC:ital,wght@0,400;0,700;0,900;1,400;1,700;1,900&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900&display=swap');
+<?php
+session_start();
+
+$servername = "localhost";
+$dbname = "db_sdshoppe";
+$username = "root";  
+$password = "";  
+
+try {
+    
+    $pdo = new PDO("mysql:host=$servername;dbname=$dbname", $username, $password);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch (PDOException $e) {
+    die("Database connection failed: " . $e->getMessage());
+}
+
+ //Check if the user is logged in
+if (!isset($_SESSION['user_id'])) {
+    header("Location: haveacc.php"); // Redirect to login if not logged in
+    exit;
+}
+
+// Access user information from the session
+$user_id = $_SESSION['user_id'];
+$user_email = $_SESSION['user_email'];
+
+$product_id = isset($_GET['product_id']) ? intval($_GET['product_id']) : 0;
+
+// Query to get the main product details
+$stmt = $pdo->prepare('SELECT product_name, price, quantity FROM products WHERE product_id = :product_id');
+$stmt->execute(['product_id' => $product_id]);
+$product = $stmt->fetch(PDO::FETCH_ASSOC);
+
+// Query to get the product colors 
+$stmtColors = $pdo->prepare('SELECT product_pic, color_name FROM product_colors WHERE product_id = :product_id');
+$stmtColors->execute(['product_id' => $product_id]);
+$product_colors = $stmtColors->fetchAll(PDO::FETCH_ASSOC);
+
+$stmtUser = $pdo->prepare('SELECT lastname, firstname FROM users_credentials WHERE id = :user_id');
+$stmtUser->execute(['user_id' => $user_id]);
+$user = $stmtUser->fetch(PDO::FETCH_ASSOC);
+
+// Handle form submission
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['cart'])) {
+    $quantity = isset($_POST['qty']) ? intval($_POST['qty']) : 1;
+    $color = isset($_POST['color']) ? $_POST['color'] : '';
+    $total_price = $product['price'] * $quantity;
+
+    // Insert into shopping_cart table
+    $stmt = $pdo->prepare("INSERT INTO shopping_cart (product_id, product, unit_price, quantity, customer_id, lastname, firstname, color, total_price) 
+                           VALUES (:product_id, :product_name, :price, :quantity, :customer_id, :lastname, :firstname, :color, :total_price)");
+    $stmt->execute([
+        ':product_id' => $product_id,
+        ':product_name' => $product['product_name'],
+        ':price' => $product['price'],
+        ':quantity' => $quantity,
+        ':customer_id' => $user_id,
+        ':lastname' => $user['lastname'],
+        ':firstname' => $user['firstname'],
+        ':color' => $color,
+        ':total_price' => $total_price
+    ]);
+
+    // Redirect to cart page after adding to cart
+    header("Location: cart.php");
+    exit;
+}   
+
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <link rel="icon" href="Assets/sndlogo.png" type="logo">
+    <link rel="stylesheet" >
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <title>S&D Fabrics</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Kumbh+Sans:wght@100..900&family=Playfair+Display+SC:ital,wght@0,400;0,700;0,900;1,400;1,700;1,900&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900&display=swap');
 
 body {
-    background: url(/SnD_Shoppe-main/Assets/bgLogin.png) rgba(0, 0, 0, 0.3);
+    background: url(Assets/bgLogin.png) rgba(0, 0, 0, 0.3);
     background-blend-mode: multiply;
     background-position: center;
     background-size: cover;
@@ -103,7 +185,6 @@ h1{
 
 /* Product Card Styling */
 .product-container {
-    
     display: flex;
     justify-content: center;
     align-items: center;
@@ -113,7 +194,7 @@ h1{
 }
 
 .product-card {
-    margin-top: 90px;
+    margin-top: 100px;
     max-width: 800px;
     width: 100%;
     background-color: #f1e8d9;
@@ -142,8 +223,9 @@ h1{
 .product-image img {
     max-width: 100%;
     height: auto;
-    border-radius: 8px;
+    border-radius: 2px;
     position: relative;
+
 }
 
 /* Prev and Next Buttons Positioned Center on Image Sides */
@@ -171,7 +253,7 @@ h1{
     transition: background-color 0.3s, transform 0.2s;
     position: absolute; 
     top: 50%; 
-    transform: translateY(-700%); 
+    transform: translateY(-570%); 
 }
 
 /* Specific styling for prev and next buttons */
@@ -185,11 +267,11 @@ h1{
 
 /* Optional: Add margins to adjust spacing between buttons */
 .button-container .btn {
-    margin: 0 5px; 
+    margin: 7px; 
 }
 
 .button-container .btn:hover {
-    background-color: #d9b65d;
+    background-color: #dcaa2e;
 }
 
 /* Example CSS */
@@ -198,16 +280,14 @@ h1{
 }
 
 .btn-secondary {
-    background-color: none; 
+    background-color: #a2a2a2;
     color: #000; 
 }
 
 .btn-primary {
-    background-color: none; 
+    background-color: #d9b65d;
     color: #fff; 
 }
-
-
 
 /* Align buttons to left and right of image */
 .button-container .btn-prev {
@@ -230,7 +310,7 @@ h1{
 .quantity-select,
 .color-options .color-btn {
     border-radius: 10px;
-    border: 1px solid #d1b894;
+    border: 1px solid #1e1e1e;
     background-color: #f1e8d9;
     padding: 5px 10px;
     margin: 5px;
@@ -254,7 +334,7 @@ h1{
     justify-content: center;
     border-radius: 20px;
     border: 1px solid #1e1e1e;
-    background-color: #f1e8d9;
+    background-color: #d9b65d;
     padding: 10px 20px;
     margin: 10px 5px;
     cursor: pointer;
@@ -262,7 +342,7 @@ h1{
 }
 
 .btn-custom:hover {
-    background-color: #e5d6c0;
+    background-color: #dcc07a;
 }
 
 .color-swatch {
@@ -271,6 +351,42 @@ h1{
     border-radius: 50%;
     margin-right: 5px;
 }
+
+.counter-qty {
+    margin-top: 15px;
+}
+
+.qty {
+    display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	text-align: center;
+}
+
+.qty input {
+    text-align: center;
+    width: 20%;
+}
+
+/* For Chrome, Edge, Safari */
+input[type=number]::-webkit-inner-spin-button, 
+input[type=number]::-webkit-outer-spin-button { 
+    -webkit-appearance: none; 
+    margin: 0; 
+}
+
+.qty button {
+    width: auto; 
+    height: auto;
+	color: #1e1e1e;
+	font-size: 10px;
+    background-color: #dcc07a;
+}
+
+.qty label {
+    margin-right: 10px;
+}
+
 
 /* Media Queries */
 @media (max-width: 768px) {
@@ -312,4 +428,219 @@ h1{
         height: 25px;
     }
 }
+        </style>
+</head>
+<body class="vh-100">
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top">
+        <div class="container-fluid d-flex justify-content-between align-items-center">
+            <a class="navbar-brand fs-4" href="homepage.php">
+                <img src="Assets/sndlogo.png" width="70px" alt="Logo"/>
+            </a>
 
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarTogglerDemo01" aria-controls="navbarTogglerDemo01" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbarTogglerDemo01">
+                <div class="mx-auto d-flex justify-content-center flex-grow-1">
+                    <form class="search-bar" role="search">
+                        <div class="input-group">
+                            <span class="input-group-text" id="basic-addon1">
+                                <i class="bi bi-search search-icon"></i>
+                            </span>
+                            <input class="form-control" type="search" placeholder="Search..." aria-label="Search" aria-describedby="basic-addon1">
+                        </div>
+                    </form>
+                </div>
+
+                <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link nav-link-black active" aria-current="page" href="#">
+                            <img src="Assets/svg(icons)/shopping_cart.svg" alt="cart">
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link nav-link-black" href="#">
+                            <img src="Assets/svg(icons)/notifications.svg" alt="notif">
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link nav-link-black" href="#">
+                            <img src="Assets/svg(icons)/inbox.svg" alt="inbox">
+                        </a>
+                    </li>
+
+                    <!-- Account Dropdown Menu -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link nav-link-black dropdown-toggle" href="#" id="accountDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <img src="Assets/svg(icons)/account_circle.svg" alt="account">
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="accountDropdown">
+                            <li><a class="dropdown-item" href="accountSettings.php">Account & Security</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-danger" href="haveacc.php">Logout</a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    <div class="product-container">
+        <div class="product-card row">
+            <button class="btn-close" onclick="window.location.href='homepage.php';" aria-label="Close">✖</button>
+            <!-- Image Section -->
+            <div class="col-md-6 product-image text-center">
+                <img alt="Product Image" class="img-fluid" style="width: 100%;">
+                <script>
+                    // Pass the available colors to JavaScript
+                    let colors = <?= json_encode(array_column($product_colors, 'product_pic')) ?>;
+                </script>    
+
+                <div class="mt-3">
+                    <div class="button-container">
+                        <button class="btn btn-secondary" onclick="prevColor()">
+                            <i class="fas fa-arrow-left"></i> <!-- Left Arrow -->
+                        </button>
+                        <button id="next-button" class="btn btn-primary" onclick="nextColor()">
+                            <i class="fas fa-arrow-right"></i> <!-- Right Arrow -->
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Product Details Section -->
+            <div class="col-md-6 product-details">
+                <h1><?= htmlspecialchars($product['product_name']) ?></h1>
+                <p>Price: <span class="price-tag"><?= htmlspecialchars($product['price']) ?></span> per yard</p>
+                <p>Available Stocks: <span><?= htmlspecialchars($product['quantity']) ?> Yards</span></p>
+
+                <!-- Color Options Section -->
+                <h6>Available Colors:</h6>
+                    <div class="color-options d-flex flex-wrap justify-content-center">
+                        <?php foreach ($product_colors as $index => $color): ?>
+                            <button class="color-btn" onclick="changeColor(<?= $index ?>)">
+                                <?= htmlspecialchars($color['color_name']) ?>
+                                <img src="<?= htmlspecialchars($color['product_pic']) ?>" alt="<?= htmlspecialchars($color['color_name']) ?>" class="color-swatch">
+                            </button>
+                        <?php endforeach; ?>
+                    </div>
+
+                <!-- Counter Section -->
+                <form method="POST" action="">
+                <input type="hidden" name="color" value="">
+                <div class="counter-qty">
+                        <p class="qty">
+                            <label for="qty">Quantity:</label>
+                            <button class="qtyminus" aria-hidden="true">&minus;</button>
+                            <input type="number" name="qty" id="qty" min="1" max="100" step="1" value="1">
+                            <button class="qtyplus" aria-hidden="true">&plus;</button>
+                        </p>		
+                </div>
+            
+                <div class="button-group d-flex flex-wrap justify-content-center">
+                    <button type="submit" class="btn-custom" name="cart">
+                        <img src="Assets/svg(icons)/shopping_cart.svg" alt="cart"> Add To Cart
+                    </button>
+                
+            </form>
+
+                <button class="btn-custom buy-now">Buy Now</button>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+                        </form>
+
+
+    <script>
+        
+let currentColorIndex = 0;
+
+// Function to change the product image based on the selected color
+function changeColor(index) {
+    currentColorIndex = index;
+    const productImage = document.querySelector(".product-image img");
+    const colorInput = document.querySelector("input[name='color']"); // Hidden input for color
+    if (productImage) {
+        productImage.src = colors[index];
+        productImage.onerror = function () {
+            console.error("Failed to load image:", colors[index]);
+            productImage.src = "Assets/fallback.jpg"; // Fallback image in case of error
+        };
+    }
+    // Update hidden color input with the selected color name
+    colorInput.value = document.querySelectorAll(".color-btn")[index].textContent.trim();
+}
+
+// Functions for previous and next buttons
+function prevColor() {
+    currentColorIndex = (currentColorIndex - 1 + colors.length) % colors.length;
+    changeColor(currentColorIndex);
+}
+
+function nextColor() {
+    currentColorIndex = (currentColorIndex + 1) % colors.length;
+    changeColor(currentColorIndex);
+}
+
+// Initial display of the first color
+window.onload = function () {
+    changeColor(currentColorIndex);
+};
+
+// Add event listener for keydown events
+document.addEventListener("keydown", function (event) {
+    if (event.key === "ArrowLeft") {
+        prevColor(); // Go to previous color
+    } else if (event.key === "ArrowRight") {
+        nextColor(); // Go to next color
+    }
+});
+
+/*
+* @Adilade Input Quantity Increment
+* 
+* Free to use - No warranty
+*/
+
+var input = document.querySelector('#qty');
+var btnminus = document.querySelector('.qtyminus');
+var btnplus = document.querySelector('.qtyplus');
+
+if (input !== undefined && btnminus !== undefined && btnplus !== undefined && input !== null && btnminus !== null && btnplus !== null) {
+	
+	var min = Number(input.getAttribute('min'));
+	var max = Number(input.getAttribute('max'));
+	var step = Number(input.getAttribute('step'));
+
+	function qtyminus(e) {
+		var current = Number(input.value);
+		var newval = (current - step);
+		if(newval < min) {
+			newval = min;
+		} else if(newval > max) {
+			newval = max;
+		} 
+		input.value = Number(newval);
+		e.preventDefault();
+	}
+
+	function qtyplus(e) {
+		var current = Number(input.value);
+		var newval = (current + step);
+		if(newval > max) newval = max;
+		input.value = Number(newval);
+		e.preventDefault();
+	}
+		
+	btnminus.addEventListener('click', qtyminus);
+	btnplus.addEventListener('click', qtyplus);
+  
+} // End if test
+
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
