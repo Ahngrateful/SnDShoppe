@@ -163,24 +163,28 @@ h1{
     max-height: 80vh; 
     background-color: #b6b3ae; 
     border-radius: 15px;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15); 
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15); 
     margin: 10px 0;
     padding: 20px;
+    text-decoration: none;
 }
 
 /* Styling for the Category heading */
 h2 {
     font-family: "Playfair Display SC", serif;
     font-weight: 600;
-    font-size: 32px;
-    margin: 20px 0;
+    font-size: 37px;
+    margin: 50px 0;
+    text-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    padding-top: 10px;
+    padding-bottom: -5px;
 }
 
 /* Category section styling */
 .category-card {
     max-height: 80vh; 
     overflow-y: auto; 
-    background-color: #b6b3ae;
+    background: radial-gradient(circle, rgba(255,241,202,1) 0%, rgba(209,194,157,1) 100%);
     padding: 20px;
     border-radius: 15px;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
@@ -204,15 +208,21 @@ h2 {
     align-items: center;
     text-align: center;
     flex: 1 1 120px; /* Allow the items to take up space evenly */
-    max-width: 120px; 
+    max-width: 120px;
+    transition: transform 400ms;
+}
+
+.category:hover {
+    transform: scale(1.2);
 }
 
 .category img {
-    width: 100px; 
-    height: 100px; 
+    width: 150px; 
+    height: 150px; 
     border-radius: 50%; 
-    border: 2px solid #1e1e1e; 
-    object-fit: cover; 
+    border: 4px solid #d9b65d; 
+    object-fit: cover;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 .category p {
@@ -220,6 +230,17 @@ h2 {
     font-weight: bold;
     font-size: 16px; 
     font-family: "Playfair Display SC", serif;
+    color: #1e1e1e;
+}
+
+.category a{
+    color: #d9b65d;
+    text-decoration: none;
+}
+
+.category a:hover {
+    color: #d9b65d;
+    text-decoration: underline #d9b65d;
 }
 
 /* Responsive adjustments */
@@ -250,20 +271,25 @@ h2 {
 
 .filter-buttons button {
     padding: 8px 12px; 
-    border: 2px solid #1e1e1e;
-    background-color: #FFFFFF; 
+    color: #c7a754;
+    background-color: transparent;
     cursor: pointer;
-    border-radius: 50px; 
+    border-radius: 10px; 
     font-weight: bold;
-    transition: background-color 0.3s; 
+    transition: background-color 0.3s;
+    height: auto;
     min-width: 10px; 
     width: auto; 
-    flex: 0 0 auto; 
+    flex: 0 0 auto;
+    border: none;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    border: 1px solid #d9b65d;
 }
 
 /* Hover effect */
 .filter-buttons button:hover {
-    background-color: #ccc; 
+    color: #f1e8d9;
+    background-color: #d9b65d; 
 }
 
 /* Responsive adjustments */
@@ -298,15 +324,22 @@ h2 {
     padding: 10px;
     max-width: 1000px; 
     margin: 0 auto; 
-    gap: 20px;
+    row-gap: 50px;
+    column-gap: 50px;
 }
 
 .fabric-card {
-    width: 150px; 
+    width: 200px; 
     height: auto; 
     border-radius: 10px;
     overflow: hidden;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    transition: transform 400ms;
+    border: 1px solid #d9b65d;
+}
+
+.fabric-card:hover {
+    transform: scale(1.2);
 }
 
 .fabric-content {
@@ -315,11 +348,11 @@ h2 {
     align-items: center; 
 }
 
-
 .fabric-card img {
     width: 100%; 
     height: auto; 
     object-fit: cover; 
+    border: 1px solid #d9b65d;
 }
 
 .fabric-card p {
@@ -327,9 +360,17 @@ h2 {
     font-weight: bold;
     font-size: 14px;
     text-align: center; /* Center text below image */
-    color: #1e1e1e;
 }
 
+.fabric-card a {
+    color: #1e1e1e;
+    text-decoration: none;
+}
+
+.fabric-card a:hover {
+    color: #c7a754;
+    text-decoration: underline;
+}
 
         </style>
 </head>
@@ -413,8 +454,8 @@ h2 {
             <div class="category col-4 col-md-2 text-center">
                 <a href="search_landing.php?category=<?= urlencode($categoryName) ?>">
                     <img src="<?= $productImage ?>" alt="Fabric Image" class="rounded-circle">
+                    <p><?= htmlspecialchars($item['category']) ?></p>
                 </a>
-                <p><?= $categoryName ?></p>
             </div>
         <?php 
                 $count++;
@@ -443,8 +484,9 @@ h2 {
                 <div class="fabric-content">
                     <a href="product.php?product_id=<?= htmlspecialchars($item['product_id']) ?>">
                         <img src="<?= htmlspecialchars($item['product_image']) ?>" alt="Fabric Image" style="width: 200px; height: 200px; object-fit: cover; border-radius: 10px;">
+                        <p><?= htmlspecialchars($item['product_name']) ?></p>
                     </a>
-                    <p><?= htmlspecialchars($item['product_name']) ?></p>
+                    
                 </div>
             </div>
         <?php endforeach; ?>
