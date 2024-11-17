@@ -277,11 +277,17 @@ if (isset($_GET['category'])) {
             border: 1px solid #7c7c7c;
             box-shadow: 0.5px 0.5px 5px #7c7c7c;
             height: auto;
-            padding: 10px;
+            padding: 15px;
+            transition: transform 400ms;
+            background-color: #FFF9E6;
+        }
+        .categories-col:hover {
+            transform: scale(1.2);
         }
         .categories-col img{
             width: 100%;
             height: 100%;
+            border-radius: 5px;
         }
         .row p{
             padding: 10px;
