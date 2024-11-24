@@ -491,6 +491,9 @@ if (isset($_GET['category'])) {
             font-family: "Playfair Display SC", serif;
             margin-top: 100px;
         }
+        html {
+        scroll-behavior: smooth;
+        }
     </style>
     
 </head>
@@ -498,15 +501,15 @@ if (isset($_GET['category'])) {
     <!-- Navbar -->
     <nav class="navbar navbar-expand-lg navbar-dark" style="background-color: #f1e8d9; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);">
         <div class="container-fluid d-flex justify-content-between align-items-center">
-            <a class="navbar-brand fs-4" href="homepage.html">
+            <a class="navbar-brand fs-4" href="#">
                 <img src="Assets/sndlogo.png" width="70px" alt="Logo"/>
             </a>
 
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarTogglerDemo01" aria-controls="navbarTogglerDemo01" aria-expanded="false" aria-label="Toggle navigation">
+            <!--button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarTogglerDemo01" aria-controls="navbarTogglerDemo01" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
 
-            <!-- idk the function so remove ko muna for the meantime
+            <!- idk the function so remove ko muna for the meantime
             <div class="collapse navbar-collapse" id="navbarTogglerDemo01">
                 <div class="mx-auto d-flex justify-content-center flex-grow-1">
                     <form class="search-bar" name="search" role="search" method="POST" action="">
@@ -517,7 +520,7 @@ if (isset($_GET['category'])) {
                             <input class="form-control" type="search" placeholder="Search..." aria-label="Search" aria-describedby="basic-addon1">
                         </div>
                     </form>
-                </div> -->
+                </div> ->
 
                 <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
                     <li class="nav-item">
@@ -537,7 +540,7 @@ if (isset($_GET['category'])) {
                         </a>
                     </li>
 
-                    <!-- New Account Dropdown Menu -->
+                    <!- New Account Dropdown Menu -->
                     <li class="nav-item dropdown">
                         <a class="nav-link nav-link-black dropdown-toggle" href="#" id="accountDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <img src="Assets/svg(icons)/account_circle.svg" alt="account">
@@ -565,7 +568,7 @@ if (isset($_GET['category'])) {
         <div class="col-1">
             <h1>Where Quality Fabrics<br>Meet Creativity</h1>
             <summary style="list-style-type: none;font-weight: lighter;">Discover a world of premium fabrics tailored to inspire your creative journey. Whether you’re crafting clothing, home décor, or unique accessories, we’re here to provide the finest materials to bring your ideas to life.</summary>
-            <form action="homepage.php">
+            <form action="#categories">
                 <button type="submit">Explore Now!</button>
             </form>
         </div>
@@ -575,13 +578,13 @@ if (isset($_GET['category'])) {
     </div>
 
     <!--CATEGORIES-->
-    <div class="categories">
+    <div class="categories" id="categories">
         <div class="available-row" style="background: linear-gradient(360deg, rgba(234,217,149,0.6694327389158788) -84%, rgba(255,255,255,0) 100%); height: 100px; box-shadow: -1px 4px 5px rgba(0, 0, 0, 0.15);">
             <h2>Available Fabrics</h2>
         </div>
 
         <div class="available-row" style="margin-bottom: 20px; margin-top: 20px;">
-            <a href="homepage.php">All Fabrics</a>
+            <a href="url">All Fabrics</a>
             <a href="url">New Arrivals</a>
             <a href="url">Popular</a>
         </div>
@@ -594,7 +597,7 @@ if (isset($_GET['category'])) {
                 if ($count >= 4) break;
             ?>
                 <div class="categories-col">
-                    <a href="haveacc.php?category=<?= urlencode($item['category']) ?>">
+                    <a href="dupesearchlanding.php?category=<?= urlencode($item['category']) ?>">
                         <img src="<?= htmlspecialchars($item['product_image']) ?>" alt="Fabric Image" >
                         <p><?= htmlspecialchars($item['category']) ?></p>
                     </a>
@@ -661,13 +664,20 @@ if (isset($_GET['category'])) {
             
             <button type="submit" class="btn" name="continue" required>Register Now</button></br></br>
                         
-                <a href="Login.html">HAVE AN ACCOUNT?<span class="underline-link"><br>LOGIN HERE</span> </a> 
+                <a href="haveacc.php">HAVE AN ACCOUNT?<span class="underline-link"><br>LOGIN HERE</span> </a> 
             </form>
         </div>
         <div class="presignup-abt">
             <h2>Register Today to Experience the Finest Fabrics with S&D!</h2>
         </div>
     </div>
-
+<script>
+    document.querySelector('a[href="#categories"]').addEventListener('click', function (e) {
+    e.preventDefault();
+    document.querySelector('#categories').scrollIntoView({
+        behavior: 'smooth'
+    });
+});
+</script>
 </body>
 </html>
