@@ -20,19 +20,166 @@ if (!isset($_SESSION['user_id'])) {
 
 $user_id = $_SESSION['user_id'];
 
-$stmt = $pdo->prepare('SELECT cart_id, product, color, unit_price, quantity, total_price FROM shopping_cart WHERE customer_id = :user_id');
+$stmt = $pdo->prepare('SELECT product_id, cart_id, product, color, unit_price, quantity, total_price FROM shopping_cart WHERE customer_id = :user_id');
 $stmt->execute(['user_id' => $user_id]);
 $cart_items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $profile_data = [];
-$stmt = $pdo->prepare('SELECT firstname, lastname, email, phone, address FROM users_credentials WHERE id = ?');
+$stmt = $pdo->prepare('SELECT firstname, lastname, email, phone, gender, birthdate, address, subdivision,
+barangay, postal, city, place FROM users_credentials WHERE id = ?');
 $stmt->execute([$user_id]);
 $profile_data = $stmt->fetch(PDO::FETCH_ASSOC);
+$customer_name = $profile_data['firstname'] . ' ' . $profile_data['lastname'];
+$address = $profile_data['address'] . ', ' . $profile_data['subdivision'] . ', ' . $profile_data['barangay'] . ', ' . $profile_data['city'] . ', ' . $profile_data['place'];
 
 $stmtSubtotal = $pdo->prepare('SELECT SUM(total_price) AS subtotal FROM shopping_cart WHERE customer_id = :user_id');
 $stmtSubtotal->execute(['user_id' => $user_id]);
 $result = $stmtSubtotal->fetch(PDO::FETCH_ASSOC);
 $subtotal = $result['subtotal'] ?? 0;
+
+
+// Fetch default place for shipping
+$stmt = $pdo->prepare('SELECT place FROM users_credentials WHERE id = :user_id');
+$stmt->execute(['user_id' => $user_id]);
+$row = $stmt->fetch(PDO::FETCH_ASSOC);
+$place = $row['place'] ?? '';
+
+// Shipping rates
+$rates = [
+    'jnt' => [
+        'Metro Manila' => 40,
+        'Luzon' => 60,
+        'Visayas' => 80,
+        'Mindanao' => 105
+    ],
+    'ninja-van' => [
+        'Metro Manila' => 60,
+        'Luzon' => 90,
+        'Visayas' => 95,
+        'Mindanao' => 100
+    ],
+    'lbc' => [
+        'Metro Manila' => 44,
+        'Luzon' => 64,
+        'Visayas' => 74,
+        'Mindanao' => 74
+    ]
+];
+
+// Handle shipping option submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delivery'])) {
+    $selected_option = $_POST['delivery'];
+    $_SESSION['selected_option'] = $selected_option; // Store it in session for persistence
+} else {
+    $selected_option = $_SESSION['selected_option'] ?? 'jnt';
+}
+
+// Calculate shipping fee
+$shippingfee = $rates[$selected_option][$place] ?? 0;
+
+// Total amount
+$total = $subtotal + $shippingfee;
+
+
+$payment_id = null;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['proof'])) {
+    try {
+        $pdo->beginTransaction();
+
+        // Handle payment details
+        if (isset($_FILES['proof']) && $_FILES['proof']['error'] === UPLOAD_ERR_OK) {
+            $target_dir = "uploads/";
+            $file_name = basename($_FILES["proof"]["name"]);
+            $target_file = $target_dir . uniqid() . "_" . $file_name;
+            $file_type = strtolower(pathinfo($target_file, PATHINFO_EXTENSION));
+
+            if (in_array($file_type, ['jpg', 'jpeg', 'png', 'gif'])) {
+                if (!move_uploaded_file($_FILES["proof"]["tmp_name"], $target_file)) {
+                    throw new Exception('Error uploading the file.');
+                }
+            } else {
+                throw new Exception('Invalid file type. Please upload an image.');
+            }
+
+            $stmt = $pdo->prepare("
+                INSERT INTO payment (customer_id, customer_name, method, acc_name, number, ref_num, proof) 
+                VALUES (:customer_id, :customer_name, :method, :acc_name, :number, :ref_num, :proof)
+            ");
+            $stmt->execute([
+                ':customer_id' => $user_id,
+                ':customer_name' => htmlspecialchars($_POST['customer_name'] ?? ''),
+                ':method' => htmlspecialchars($_POST['method'] ?? ''),
+                ':acc_name' => htmlspecialchars($_POST['acc_name'] ?? ''),
+                ':number' => htmlspecialchars($_POST['number'] ?? ''),
+                ':ref_num' => htmlspecialchars($_POST['ref_num'] ?? ''),
+                ':proof' => $target_file
+            ]);
+
+            $payment_id = $pdo->lastInsertId();
+            $pdo->commit();
+
+        } 
+        }catch (Exception $e) {
+            $pdo->rollBack();
+            echo '<div class="alert alert-danger">' . htmlspecialchars($e->getMessage()) . '</div>';
+    
+        exit; // Stop further processing for this POST request
+    }
+}
+
+
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
+    try {
+        $pdo->beginTransaction();
+       
+
+        // Insert order details into order_details table
+        $stmt = $pdo->prepare("
+            INSERT INTO order_details (order_num, customer_id, sub_total, total_price, delivery_option, payment) 
+            VALUES (:order_num, :customer_id, :sub_total, :total_price, :delivery_option, :payment)
+        ");
+        $stmt->execute([
+            ':order_num' => $order_num,
+            ':customer_id' => $user_id,
+            ':sub_total' => $subtotal,
+            ':total_price' => $total,
+            ':delivery_option' => $selected_option,
+            ':payment' => $payment_id ?? null
+        ]);
+        $order_num = $pdo->lastInsertId();
+        // Insert each cart item into order_items table
+        foreach ($cart_items as $product) {
+            $stmt = $pdo->prepare("
+                INSERT INTO order_items (order_num, product_id, product_name, color, quantity) 
+                VALUES (:order_num, :product_id, :product_name, :color, :quantity)
+            ");
+            $stmt->execute([
+                ':order_num' => $order_num,
+                ':product_id' => $product['product_id'],
+                ':product_name' => $product['product'],
+                ':color' => $product['color'],
+                ':quantity' => $product['quantity']
+            ]);
+        }
+        
+        $pdo->commit();
+        // Optionally clear the shopping cart after placing the order
+    $stmt = $pdo->prepare("DELETE FROM shopping_cart WHERE customer_id = :customer_id");
+    $stmt->execute([':customer_id' => $user_id]);
+
+        echo "<script>
+    alert('Order placed successfully!');
+    window.location.href = 'mypurchase.php';
+    </script>";
+
+
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        echo '<div id="message" class="alert alert-danger">' . htmlspecialchars($e->getMessage()) . '</div>';
+    }
+    exit;
+}
 ?>
 
 <!DOCTYPE html>
@@ -40,10 +187,7 @@ $subtotal = $result['subtotal'] ?? 0;
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-      rel="stylesheet"
-    />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link rel="stylesheet"/>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <link rel="icon" href="PIC/sndlogo.png" type="logo" />
@@ -293,6 +437,11 @@ textarea.form-control {
     color: #a70000;
 }
 
+.center-message {
+  padding: 100px;
+  margin-bottom: 15px;
+    }
+
 /* Checkout Form */
 form {
     background-color: #f1e8d9 ;
@@ -319,91 +468,60 @@ form .btn-success {
         padding-top: 20px;
     }
 }
+#overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    color: #fff;
+    font-size: 2em;
+    z-index: 9999;
+    }
     </style>
   </head>
 
-  <body class="vh-100">
-    <!-- Navbar -->
-    <nav
-      class="navbar navbar-expand-lg navbar-dark"
-      style="
-        background-color: #f1e8d9;
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
-      "
-    >
-      <div
-        class="container-fluid d-flex justify-content-between align-items-center"
-      >
-        <a class="navbar-brand fs-4" href="homepage.php">
-          <img src="PIC/sndlogo.png" width="70px" alt="Logo" />
-        </a>
-
-        <button
-          class="navbar-toggler"
-          type="button"
-          data-bs-toggle="collapse"
-          data-bs-target="#navbarTogglerDemo01"
-          aria-controls="navbarTogglerDemo01"
-          aria-expanded="false"
-          aria-label="Toggle navigation"
-        >
-          <span class="navbar-toggler-icon"></span>
-        </button>
-
-        <div class="collapse navbar-collapse" id="navbarTogglerDemo01">
-          <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
-            <li class="nav-item">
-              <a class="nav-link nav-link-black" href="#">
-                <img src="/SnD_Shoppe-main/Assets/svg(icons)/notifications.svg" alt="notif" /> 
-              </a>
-            </li>
-
-            <li class="nav-item">
-              <a class="nav-link nav-link-black" href="#">
-                <img src="/SnD_Shoppe-main/Assets/svg(icons)/inbox.svg" alt="inbox" />
-              </a>
-            </li>
-
-            <!-- New Account Dropdown Menu -->
-            <li class="nav-item dropdown">
-              <a
-                class="nav-link nav-link-black dropdown-toggle"
-                href="#"
-                id="accountDropdown"
-                role="button"
-                data-bs-toggle="dropdown"
-                aria-expanded="false"
-              >
-                <img
-                  src="/SnD_Shoppe-main/Assets/svg(icons)/account_circle.svg"
-                  alt="account"
-                />
-              </a>
-              <ul
-                class="dropdown-menu dropdown-menu-end"
-                aria-labelledby="accountDropdown"
-              >
-                <li>
-                  <a
-                    class="dropdown-item"
-                    href="accountSettings.php"
-                    >My Account</a
-                  >
-                </li>
-                <li>
-                  <hr class="dropdown-divider" />
-                </li>
-                <li>
-                  <a class="dropdown-item text-danger" href="logout.php">Logout</a>
-                </li>
-              </ul>
-            </li>
-          </ul>
+<!-- Navbar --> 
+<nav class="navbar navbar-expand-lg navbar-light" style="background-color: #f1e8d9;">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="homepage.php">
+                <img src="PIC/sndlogo.png" width="70" alt="Logo">
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent" aria-controls="navbarContent" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarContent">
+                <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#">
+                            <img src="/SnD_Shoppe-main/Assets/svg(icons)/notifications.svg" alt="Notifications">
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#">
+                            <img src="/SnD_Shoppe-main/Assets/svg(icons)/inbox.svg" alt="Inbox">
+                        </a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="accountDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <img src="/SnD_Shoppe-main/Assets/svg(icons)/account_circle.svg" alt="Account">
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="accountDropdown">
+                            <li><a class="dropdown-item" href="accountSettings.php">My Account</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-danger" href="logout.php">Logout</a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
         </div>
-      </div>
     </nav>
 
-    <!-- Checkout Content -->
+    <!-- Checkout Content-->
     <div class="header-container">
       <div class="card text-center">
         <div class="card-body">
@@ -430,44 +548,46 @@ form .btn-success {
                     </p>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label fw-bold">Shipping Address:</label>
-                    <p id="address" class="form-control-plaintext ms-3">
-                        <?php echo htmlspecialchars($profile_data['address'] ?? ''); ?>
-                    </p>
-                </div>
-                <div class="mb-3">
                     <label class="form-label fw-bold">Phone:</label>
                     <p id="contact" class="form-control-plaintext ms-3">
                         <?php echo htmlspecialchars($profile_data['phone'] ?? ''); ?>
                     </p>
                 </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Address</label>
+                    <p id="address" name= "address" class="form-control-plaintext ms-3">
+                    <?php echo htmlspecialchars($profile_data['address'] . ' ' . $profile_data['subdivision'] . ' ' . $profile_data['barangay']
+                . ' ' . $profile_data['postal'] . ' ' . $profile_data['city'] . ' ' . $profile_data['place']); ?> 
+                </p>
+                </div>
                  <!-- Shipping Option -->
                  <h4 class="mb-4">DELIVERY OPTION</h4>
                     <div class="mb-3">
                         <label for="shipping-option" class="form-label">Select Shipping Option</label>
-                        <select class="form-select" id="shipping-option" required>
-                        <option value="ninja-van">Ninja Van</option>
-                        <option value="lbc">LBC</option>
-                        <option value="j-t-express">J&T Express</option>
+                        <form method="POST" action="">
+    <select class="form-select" name="delivery" id="shipping-option" required onchange="this.form.submit()">
+        <option value="jnt" <?php echo ($selected_option === 'jnt') ? 'selected' : ''; ?>>J&T Express</option>
+        <option value="ninja-van" <?php echo ($selected_option === 'ninja-van') ? 'selected' : ''; ?>>Ninja Van</option>
+        <option value="lbc" <?php echo ($selected_option === 'lbc') ? 'selected' : ''; ?>>LBC</option>
+    </select>
+</form>
+</div>
+                    
+                  <!--payment option-->
+                    <h4 class="mb-4">Select Payment Option To Place Order</h4>
+                    <form method="POST" action="">
+                      <div class="mb-3">
+                        <label for="payment-option" class="form-label"
+                          >Payment Method</label>
+                        <select class="form-select" name="method" id="payment-option" required>
+                          <option value="" >Select a payment method</option>
+                          <option value="Gcash">GCash</option>
+                          <option value="Maya">Maya</option>
                         </select>
-                    </div>
+                      </div>
             </div>
         </div>
-        
-            
-                    <!-- Payment Option 
-                    <h4 class="mb-4">PAYMENT OPTION</h4>
-                    <div class="mb-3">
-                        <label for="payment-option" class="form-label">Select Payment Option</label>
-                        <select class="form-select" id="payment-option" required>
-                        <option value="gcash">GCash</option>
-                        <option value="maya">Maya</option>
-                        <option value="online-banking">Online Banking</option>
-                        </select>
-                    </div>
-                    </form>
-                </div>
-            </div>
+
         
           <!-- Order Summary -->
 <div class="col-lg-4 col-md-12">
@@ -485,16 +605,173 @@ form .btn-success {
             <p class="subtotal fw-bold">₱<?php echo number_format($subtotal, 2); ?></p>
         </div>
         <div class="d-flex justify-content-between">
-            <h5>Total</h5>
-            <h5 class="total-price fw-bold">₱<?php echo number_format($subtotal, 2); ?></h5>
+            <p>Shipping Fee</p>
+            <p class="subtotal fw-bold">₱<?php echo number_format($shippingfee, 2); ?></p>
         </div>
-        <button class="btn btn-success btn-lg w-100 mt-4">Proceed to Payment
-        </button>
-        <button class="btn return-button w-100 mt-3" onclick="window.location.href='cart.php'">Back to Cart</button>
+        <div class="d-flex justify-content-between">
+            <h5>Total</h5>
+            <h5 class="total-price fw-bold">₱<?php echo number_format($total, 2); ?></h5>
+        </div>
+        
+        <!--button class="btn btn-success btn-lg w-100 mt-4" name="place_order">Place Order</button--> <!--inalis para isahang save na lang sa payment-->
+        <button type="button" class="btn return-button w-100 mt-3" onclick="window.location.href='cart.php'">Back to Cart</button>
+        </form>
     </div>
 </div>
-      
-      <script src="/Assets/js/product.js"></script>
+
+<!-- GCash Modal -->
+<div
+      class="modal fade"
+      id="gcashModal"
+      tabindex="-1"
+      aria-labelledby="gcashModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="gcashModalLabel">
+              GCash Payment Verification
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+          <form id="gcash-form" action="" method="POST" enctype="multipart/form-data">
+          <input type="hidden" name="user_id" value="<?php echo $user_id; ?>">
+          <input type="hidden" name="customer_name" value="<?php echo htmlspecialchars($profile_data['firstname'] . ' ' . $profile_data['lastname']); ?>">
+          <input type="hidden" name="method" id="method" value="">
+              <div class="mb-3 text-center">
+                <label for="gcash-qr-code" class="form-label">QR Code</label>
+                <div id="gcash-qr-code" class="qr-code-container">
+                  <img
+                    src="images\gcashqr.jpg"
+                    alt="GCash QR Code"
+                    class="qr-code-image"
+                    width="100%"
+                  />
+                </div>
+              </div>
+
+              <div class="mb-3">
+                <label for="acc_name" class="form-label">Account Name</label>
+                <input type="text" class="form-control" name="acc_name" id="acc_name" required>
+              </div>
+
+              <div class="mb-3">
+                <label for="number" class="form-label">Mobile Number</label>
+                <input type="text" class="form-control" name="number" id="number" required>
+              </div>
+
+              <div class="mb-3">
+                <label for="ref_num" class="form-label">Reference Number</label>
+                <input type="text" class="form-control" name="ref_num" id="ref_num" required>
+              </div>
+
+              <div class="mb-3">
+                <label for="proof" class="form-label">Upload Proof of Payment</label>
+                <input type="file" class="form-control" name="proof" id="proof" accept="image/*" required>
+              </div>
+
+              <button type="submit" name="place_order" class="btn btn-success w-100" onclick="setPaymentMethod('Gcash')">
+                Place Order
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Maya Modal -->
+    <div
+      class="modal fade"
+      id="mayaModal"
+      tabindex="-1"
+      aria-labelledby="mayaModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="mayaModalLabel">
+              Maya Payment Verification
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <form id="maya-form" action="" method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="user_id" value="<?php echo $user_id; ?>">
+          <input type="hidden" name="customer_name" value="<?php echo htmlspecialchars($profile_data['firstname'] . ' ' . $profile_data['lastname']); ?>">
+          <input type="hidden" name="method" id="method" value="">
+              <div class="mb-3 text-center">
+                <label for="maya-qr-code" class="form-label">QR Code</label>
+                <div id="maya-qr-code" class="qr-code-container">
+                  <img
+                    src="images\paymayaqr.jpg"
+                    alt="Maya QR Code"
+                    class="qr-code-image"
+                    width="100%"
+                  />
+                </div>
+              </div>
+
+              <div class="mb-3">
+                <label for="acc_name" class="form-label">Account Name</label>
+                <input type="text" class="form-control" name="acc_name" id="acc_name" required>
+              </div>
+
+              <div class="mb-3">
+                <label for="number" class="form-label">Mobile Number</label>
+                <input type="text" class="form-control" name="number" id="number" required>
+              </div>
+
+              <div class="mb-3">
+                <label for="ref_num" class="form-label">Reference Number</label>
+                <input type="text" class="form-control" name="ref_num" id="ref_num" required>
+              </div>
+
+              <div class="mb-3">
+                <label for="proof" class="form-label">Upload Proof of Payment</label>
+                <input type="file" class="form-control" name="proof" id="proof" accept="image/*" required>
+              </div>
+
+              <button type="submit" name="place_order" class="btn btn-success w-100" onclick="setPaymentMethod('Maya')">
+                Place Order
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="product.js"></script>
+    <script>
+    document
+    .getElementById("payment-option")
+    .addEventListener("change", function () {
+        const selectedOption = this.value;
+        document.querySelectorAll('.modal form input[name="method"]').forEach(input => {
+            input.value = selectedOption; // Sync method in modals
+        });
+
+        if (selectedOption === "Gcash") {
+            const gcashModal = new bootstrap.Modal(document.getElementById("gcashModal"));
+            gcashModal.show();
+        } else if (selectedOption === "Maya") {
+            const mayaModal = new bootstrap.Modal(document.getElementById("mayaModal"));
+            mayaModal.show();
+        }
+    });
+    </script>
       
   </body>
 </html>
