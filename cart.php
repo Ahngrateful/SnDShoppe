@@ -404,7 +404,7 @@ document.addEventListener("DOMContentLoaded", function() {
         //const tax = 4.00;
 
         // Calculate total
-        const total = subtotal + shipping + tax;
+        const total = subtotal;
 
         // Update the total in the HTML
         document.querySelector(".total-price").innerText = "₱" + total.toFixed(2);
