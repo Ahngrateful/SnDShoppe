@@ -22,7 +22,8 @@ if ($conn->connect_error) {
 
 // Fetch user profile data
 $profile_data = [];
-$stmt = $conn->prepare("SELECT firstname, lastname, email, phone, gender, birthdate, address FROM users_credentials WHERE id = ?");
+$stmt = $conn->prepare("SELECT firstname, lastname, email, phone, gender, birthdate, address, subdivision,
+barangay, postal, city, place FROM users_credentials WHERE id = ?");
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
 $result = $stmt->get_result();
@@ -76,6 +77,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save_profile'])) {
     $phone = $_POST['phone'];
     $birthdate = $_POST['birthdate'];
     $address = $_POST['address'];
+    $subdivision =  $_POST['subdivision'];
+    $barangay = $_POST['barangay'];
+    $postal =  $_POST['postal'];
+    $city =  $_POST['city'];
+    $place =  $_POST['place'];
 
     // Update profile data in the database
     $stmt = $conn->prepare("UPDATE users_credentials SET firstname = ?, lastname = ?, email = ?, phone = ?, birthdate = ?, address = ? WHERE id = ?");
@@ -357,7 +363,8 @@ h1 {
                     <p><strong>Phone Number:</strong> <?php echo htmlspecialchars($profile_data['phone']); ?> <a href="javascript:void(0);" onclick="toggleEdit()" class="link-primary">Change</a></p>
                     <p><strong>Gender:</strong> <?php echo htmlspecialchars($profile_data['gender']); ?></p>
                     <p><strong>Date of Birth:</strong> <?php echo htmlspecialchars($profile_data['birthdate']); ?> <a href="javascript:void(0);" onclick="toggleEdit()" class="link-primary">Change</a></p>
-                    <p><strong>Address:</strong> <?php echo htmlspecialchars($profile_data['address']); ?> <a href="javascript:void(0);" onclick="toggleEdit()" class="link-primary">Change</a></p>
+                    <p><strong>Address:</strong> <?php echo htmlspecialchars($profile_data['address'] . ' ' . $profile_data['subdivision'] . ' ' . $profile_data['barangay']
+                . ' ' . $profile_data['postal'] . ' ' . $profile_data['city'] . ' ' . $profile_data['place']); ?> <a href="javascript:void(0);" onclick="toggleEdit()" class="link-primary">Change</a></p>
                 </div>
             </div>
 
@@ -387,8 +394,19 @@ h1 {
                     <input type="date" class="form-control" name="birthdate" value="<?php echo htmlspecialchars($profile_data['birthdate']); ?>" required>
                 </div>
                 <div class="mb-3">
-                    <label for="birthdate" class="form-label">Date of Birth</label>
+                    <label for="address" class="form-label">Address</label>
                     <input type="text" class="form-control" name="address" value="<?php echo htmlspecialchars($profile_data['address']); ?>" required>
+                    <label for="address" class="form-label">Subdivsion</label>
+                    <input type="text" class="form-control" name="subdivision" value="<?php echo htmlspecialchars($profile_data['subdivision']); ?>" required>
+                    <label for="address" class="form-label">Barangay</label>
+                    <input type="text" class="form-control" name="barangay" value="<?php echo htmlspecialchars($profile_data['barangay']); ?>" required>
+                    <label for="address" class="form-label">Postal</label>
+                    <input type="text" class="form-control" name="postal" value="<?php echo htmlspecialchars($profile_data['postal']); ?>" required>
+                    <label for="address" class="form-label">City</label>
+                    <input type="text" class="form-control" name="city" value="<?php echo htmlspecialchars($profile_data['city']); ?>" required>
+                    <label for="address" class="form-label">Place</label>
+                    <input type="text" class="form-control" name="place" value="<?php echo htmlspecialchars($profile_data['place']); ?>" required>
+                
                 </div>
                 <button type="submit" class="btn btn-success" name="save_profile">Save Changes</button>
                 <button type="button" class="btn btn-secondary" onclick="cancelEdit()">Cancel</button>
