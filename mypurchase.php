@@ -1,37 +1,47 @@
 <?php
 session_start();
 
+$servername = "localhost";
+$dbname = "db_sdshoppe";
+$username = "root";  
+$password = "";  
+
+try {
+    $pdo = new PDO("mysql:host=$servername;dbname=$dbname", $username, $password);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch (PDOException $e) {
+    die("Database connection failed: " . $e->getMessage());
+}
+
 if (!isset($_SESSION['user_id'])) {
-    header("Location: homepage.php");
+    header("Location: haveacc.php");
     exit;
 }
 
 $user_id = $_SESSION['user_id'];
-$user_email = $_SESSION['user_email'];
-
-// Database connection
-$servername = "localhost";
-$dbname = "db_sdshoppe";
-$username = "root";
-$password = "";
-
-$conn = new mysqli($servername, $username, $password, $dbname);
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
-}
 
 // Fetch user profile data
 $profile_data = [];
-$stmt = $conn->prepare("SELECT firstname FROM users WHERE id = ?");
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$result = $stmt->get_result();
+$stmt = $pdo->prepare('SELECT lastname, firstname FROM users_credentials WHERE id = :user_id');
+$stmt->execute(['user_id' => $user_id]);
+$profile_data = $stmt->fetch(PDO::FETCH_ASSOC);
 
-if ($result->num_rows > 0) {
-    $profile_data = $result->fetch_assoc();
-}
-
-$conn->close();
+$stmt = $pdo->prepare("
+    SELECT 
+        od.order_num, 
+        od.total_price, 
+        od.status, 
+        oi.product_name, 
+        oi.color, 
+        oi.quantity, 
+        p.product_image
+    FROM order_details od
+    JOIN order_items oi ON od.order_num = oi.order_num
+    JOIN products p ON oi.product_id = p.product_id
+    WHERE od.customer_id = :user_id
+");
+$stmt->execute([':user_id' => $user_id]);
+$order_data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -78,24 +88,6 @@ $conn->close();
         >
           <span class="navbar-toggler-icon"></span>
         </button>
-
-        <div class="collapse navbar-collapse" id="navbarTogglerDemo01">
-          <div class="mx-auto d-flex justify-content-center flex-grow-1">
-            <form class="search-bar" role="search">
-              <div class="input-group">
-                <span class="input-group-text" id="basic-addon1">
-                  <i class="bi bi-search search-icon"></i>
-                </span>
-                <input
-                  class="form-control"
-                  type="search"
-                  placeholder="Search..."
-                  aria-label="Search"
-                  aria-describedby="basic-addon1"
-                />
-              </div>
-            </form>
-          </div>
 
           <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
             <li class="nav-item">
@@ -147,7 +139,7 @@ $conn->close();
                   <hr class="dropdown-divider" />
                 </li>
                 <li>
-                  <a class="dropdown-item text-danger" href="haveacc">Logout</a>
+                  <a class="dropdown-item text-danger" href="logout.php">Logout</a>
                 </li>
               </ul>
             </li>
@@ -169,7 +161,7 @@ $conn->close();
           </a>
         </li>
         <li>
-          <a href="#" class="nav-link text-white">
+          <a href="cart.php" class="nav-link text-white">
             <i class="bi bi-heart"></i> Saved Items
           </a>
         </li>
@@ -310,151 +302,21 @@ $conn->close();
                 role="tabpanel"
                 aria-labelledby="all-tab"
               >
+              
                 <ul class="list-group">
-                  <li class="list-group-item">
-                    <img
-                      src="/SnD_Shoppe-main/Assets/fabrics/beaded lace.jpg"
-                      alt="Order Image"
-                      style="width: 50px; height: 50px"
-                      class="me-2"
-                    />
-                    Order #12345 - Status: To Pay - Price: ₱500.00
+                <?php foreach ($order_data as $details): ?>
+                <li class="list-group-item">
+                <img src="<?= htmlspecialchars($details['product_image']) ?>" alt="Product Image" style="width: 50px; height: 50px;">Order #
+                  <?php echo htmlspecialchars($details['order_num']); ?> - Name:
+                      <?php echo htmlspecialchars($details['product_name']);?> -
+                      <?php echo htmlspecialchars($details['color']); ?>
+                      <?php echo htmlspecialchars($details['quantity']);?> Yards - ₱
+                      <?php echo htmlspecialchars($details['total_price']); ?> - Status:
+                      <?php echo htmlspecialchars($details['status']); ?>
+                  
+                  <?php endforeach; ?>
                   </li>
-                  <li class="list-group-item">
-                    <img
-                      src="/SnD_Shoppe-main/Assets/fabrics/laces.jpg"
-                      alt="Order Image"
-                      style="width: 50px; height: 50px"
-                      class="me-2"
-                    />
-                    Order #12346 - Status: To Ship - Price: ₱500.00
-                  </li>
-                  <li class="list-group-item">
-                    <img
-                      src="/SnD_Shoppe-main/Assets/fabrics/satin.png"
-                      alt="Order Image"
-                      style="width: 50px; height: 50px"
-                      class="me-2"
-                    />
-                    Order #12347 - Status: To Receive - Price: ₱500.00
-                  </li>
-                  <li class="list-group-item">
-                    <img
-                      src="/SnD_Shoppe-main/Assets/fabrics/sequins.jpg"
-                      alt="Order Image"
-                      style="width: 50px; height: 50px"
-                      class="me-2"
-                    />
-                    Order #12348 - Status: Completed - Price: ₱500.00
-                  </li>
-                  <li class="list-group-item">
-                    <img
-                      src="/SnD_Shoppe-main/Assets/fabrics/velvet.jpg"
-                      alt="Order Image"
-                      style="width: 50px; height: 50px"
-                      class="me-2"
-                    />
-                    Order #12349 - Status: Cancelled - Price: ₱500.00
-                  </li>
-                </ul>
-              </div>
-
-              <div
-                class="tab-pane fade"
-                id="to-pay"
-                role="tabpanel"
-                aria-labelledby="to-pay-tab"
-              >
-                <ul class="list-group">
-                  <li class="list-group-item">
-                    <img
-                      src="/SnD_Shoppe-main/Assets/fabrics/beaded lace.jpg"
-                      alt="Order Image"
-                      style="width: 50px; height: 50px"
-                      class="me-2"
-                    />
-                    Order #12345 - Status: To Pay - Price: ₱500.00
-                  </li>
-                  <!-- Add more orders with 'To Pay' status as needed -->
-                </ul>
-              </div>
-
-              <div
-                class="tab-pane fade"
-                id="to-ship"
-                role="tabpanel"
-                aria-labelledby="to-ship-tab"
-              >
-                <ul class="list-group">
-                  <li class="list-group-item">
-                    <img
-                      src="/SnD_Shoppe-main/Assets/fabrics/laces.jpg"
-                      alt="Order Image"
-                      style="width: 50px; height: 50px"
-                      class="me-2"
-                    />
-                    Order #12346 - Status: To Ship - Price: ₱500.00
-                  </li>
-                  <!-- Add more orders with 'To Ship' status as needed -->
-                </ul>
-              </div>
-
-              <div
-                class="tab-pane fade"
-                id="to-receive"
-                role="tabpanel"
-                aria-labelledby="to-receive-tab"
-              >
-                <ul class="list-group">
-                  <li class="list-group-item">
-                    <img
-                      src="/SnD_Shoppe-main/Assets/fabrics/satin.png"
-                      alt="Order Image"
-                      style="width: 50px; height: 50px"
-                      class="me-2"
-                    />
-                    Order #12347 - Status: To Receive - Price: ₱500.00
-                  </li>
-                  <!-- Add more orders with 'To Receive' status as needed -->
-                </ul>
-              </div>
-
-              <div
-                class="tab-pane fade"
-                id="completed"
-                role="tabpanel"
-                aria-labelledby="completed-tab"
-              >
-                <ul class="list-group">
-                  <li class="list-group-item">
-                    <img
-                      src="/SnD_Shoppe-main/Assets/fabrics/sequins.jpg"
-                      alt="Order Image"
-                      style="width: 50px; height: 50px"
-                      class="me-2"
-                    />
-                    Order #12348 - Status: Completed - Price: ₱500.00
-                  </li>
-                  <!-- Add more orders with 'Completed' status as needed -->
-                </ul>
-              </div>
-
-              <div
-                class="tab-pane fade"
-                id="cancelled"
-                role="tabpanel"
-                aria-labelledby="cancelled-tab"
-              >
-                <ul class="list-group">
-                  <li class="list-group-item">
-                    <img
-                      src="/SnD_Shoppe-main/Assets/fabrics/velvet.jpg"
-                      alt="Order Image"
-                      style="width: 50px; height: 50px"
-                      class="me-2"
-                    />
-                    Order #12349 - Status: Cancelled - Price: ₱500.00
-                  </li>
+                  
                   <!-- Add more orders with 'Cancelled' status as needed -->
                 </ul>
               </div>
