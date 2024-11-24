@@ -17,6 +17,11 @@ if (isset($_POST['create'])) {
     $birthdate = $_POST['dob'];
     $gender = $_POST['gender'];
     $address = $_POST['address'];
+    $subdivision =  $_POST['subdivision'];
+    $barangay = $_POST['brgy'];
+    $postal =  $_POST['postal'];
+    $city =  $_POST['city'];
+    $place =  $_POST['place'];
     $phone = $_POST['phone'];
 
     // Check if passwords match
@@ -31,9 +36,10 @@ if (isset($_POST['create'])) {
         if ($stmt->rowCount() > 0) {
             echo '<p style="color:red; text-align:center;">Email already exists. Please use a different email.</p>';
         } else {
-            $sql = "UPDATE users_credentials SET EMAIL = ?, PASSWORD = ?, GENDER = ?, BIRTHDATE = ?, ADDRESS = ?, PHONE = ? WHERE ID = ?";
+            $sql = "UPDATE users_credentials SET EMAIL = ?, PASSWORD = ?, GENDER = ?, BIRTHDATE = ?, ADDRESS = ?, SUBDIVISION = ?, BARANGAY = ?, POSTAL = ?,
+            CITY= ?, PLACE = ?, PHONE = ? WHERE ID = ?";
             $stmt = $pdo->prepare($sql);
-           if ($stmt->execute([$email, $hashed_password, $gender, $birthdate, $address, $phone, $id])) {
+           if ($stmt->execute([$email, $hashed_password, $gender, $birthdate, $address, $subdivision, $barangay, $postal, $city, $place, $phone, $id])) {
             echo "<div id='overlay' style='display:none;'>Loading...</div>";
             echo "<script>
                     document.addEventListener('DOMContentLoaded', function() {
@@ -196,6 +202,17 @@ if (isset($_POST['cancel'])) {
         border-radius: 5px;
     }
 
+    .select-box select {
+            height: 20px;
+            width: 150px;
+            outline: #473C38;
+            border: none;
+            color: black;
+            background:  #f1e8d9;
+            border-bottom: 1px solid #44362A;
+            font-size: 15px;
+        }
+
     .password-container {
             position: relative;
         }
@@ -261,14 +278,38 @@ if (isset($_POST['cancel'])) {
 
             <label for="gender">Gender</label>
             <div class="gender-options">
-                <label><input type="radio" name="gender" value="male" required /> Male</label><br/>
-                <label><input type="radio" name="gender" value="female" required /> Female</label><br/>
-                <label><input type="radio" name="gender" value="prefer_not_say" required /> Prefer not to say</label>
+                <label><input type="radio" name="gender" value="Male" required /> Male</label><br/>
+                <label><input type="radio" name="gender" value="Female" required /> Female</label><br/>
+                <label><input type="radio" name="gender" value="Prefer_not_say" required /> Prefer not to say</label>
             </div>
 
-            <label for="address">Address</label>
-            <input type="text" placeholder="Enter Address" name="address" autocomplete="off" required />
+            <label for="ADDRESS">Address</label>
+            <label for="address">House No. & Street</label>
+            <input type="text" placeholder="Enter House No. & Street" name="address" autocomplete="off" required />
 
+            <label for="subdivision">Subdivision/Village(OPTIONAL)</label>
+            <input type="text" placeholder="Enter Subdivision/Village" name="subdivision" autocomplete="off"/>
+
+            <label for="brgy">Barangay</label>
+            <input type="text" placeholder="Enter Barangay" name="brgy" autocomplete="off" required/>
+            
+            <label for="postal">Postal</label>
+            <input type="text" placeholder="Enter Postal" name="postal" autocomplete="off" required/>
+            
+            <label for="city">City</label>
+            <input type="text" placeholder="Enter City" name="city" autocomplete="off" required/>
+
+            <label for="place">PLACE</label>
+            <div class="select-box">
+                    <select name="place" required>
+                        <option hidden>Place</option>
+                        <option selected>Metro Manila</option>
+                        <option>Luzon</option>
+                        <option>Visayas</option>
+                        <option>Mindanao</option>    
+                    </select>
+                </div>
+            </br>
             <label for="phone">Phone Number</label>
             <input type="tel" placeholder="Enter Phone Number" name="phone" autocomplete="off" maxlength="11" required/>
 
