@@ -47,19 +47,6 @@ if (isset($_POST['remove_single'])) {
     exit;
 }
 
-// Handle multiple items removal
-if (isset($_POST['remove_selected']) && isset($_POST['cart_ids'])) {
-    $cart_ids = $_POST['cart_ids'];
-    $placeholders = implode(',', array_fill(0, count($cart_ids), '?'));
-
-    $query = "DELETE FROM shopping_cart WHERE cart_id IN ($placeholders)";
-    $stmt = $pdo->prepare($query);
-    $stmt->execute($cart_ids);
-
-    header("Location: cart.php");
-    exit;
-}
-
 
 ?>
 <!DOCTYPE html>
@@ -331,7 +318,6 @@ h1 {
             <table class="table table-bordered">
                 <thead class="table-light">
                     <tr>
-                        <th scope="col"><input type="checkbox" id="select-all" onclick="toggleAll(this)" /></th>
                         <th scope="col">Product</th>
                         <th scope="col">Color</th>
                         <th scope="col">Unit Price</th>
@@ -343,7 +329,6 @@ h1 {
                 <tbody>
                     <?php foreach ($cart_items as $item): ?>
                         <tr>
-                        <td><input type="checkbox" class="item-checkbox" name="cart_ids[]" value="<?php echo $item['cart_id']; ?>" /></td>
                             <td>
                                 <div class="d-flex align-items-center">
                                     <!--<img src="<php echo htmlspecialchars($item['product_pic']); ?>" alt="Product Image" width="80" class="rounded me-3"> -->
@@ -359,7 +344,6 @@ h1 {
                     <?php endforeach; ?>
                 </tbody>
             </table>
-            <button class="btn btn-danger btn-sm" id="remove-selected" name= "remove_selected" >Remove Selected</button>
         </div>
         </form>
 
