@@ -20,10 +20,6 @@ if (!isset($_SESSION['user_id'])) {
 
 $user_id = $_SESSION['user_id'];
 
-$stmt = $pdo->prepare('SELECT product_id, cart_id, product, color, unit_price, quantity, total_price FROM shopping_cart WHERE customer_id = :user_id');
-$stmt->execute(['user_id' => $user_id]);
-$cart_items = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
 $profile_data = [];
 $stmt = $pdo->prepare('SELECT firstname, lastname, email, phone, gender, birthdate, address, subdivision,
 barangay, postal, city, place FROM users_credentials WHERE id = ?');
@@ -32,11 +28,31 @@ $profile_data = $stmt->fetch(PDO::FETCH_ASSOC);
 $customer_name = $profile_data['firstname'] . ' ' . $profile_data['lastname'];
 $address = $profile_data['address'] . ', ' . $profile_data['subdivision'] . ', ' . $profile_data['barangay'] . ', ' . $profile_data['city'] . ', ' . $profile_data['place'];
 
-$stmtSubtotal = $pdo->prepare('SELECT SUM(total_price) AS subtotal FROM shopping_cart WHERE customer_id = :user_id');
-$stmtSubtotal->execute(['user_id' => $user_id]);
-$result = $stmtSubtotal->fetch(PDO::FETCH_ASSOC);
-$subtotal = $result['subtotal'] ?? 0;
+$subtotal = 0;
+if (isset($_GET['cart_id'])) {
+    $cart_id = intval($_GET['cart_id']);
+    
+    // Fetch the specific item
+    $stmt = $pdo->prepare('SELECT product_id, cart_id, product, color, unit_price, quantity, total_price FROM shopping_cart WHERE cart_id = :cart_id AND customer_id = :user_id');
+    $stmt->execute([':cart_id' => $cart_id, ':user_id' => $user_id]);
+    $cart_items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+    // Calculate subtotal for the specific item
+    if (!empty($cart_items)) {
+        $subtotal = $cart_items[0]['total_price'];
+    }
+} else {
+    // Fetch all items in the cart by default
+    $stmt = $pdo->prepare('SELECT product_id, cart_id, product, color, unit_price, quantity, total_price FROM shopping_cart WHERE customer_id = :user_id');
+    $stmt->execute([':user_id' => $user_id]);
+    $cart_items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Calculate subtotal for all items
+    $stmtSubtotal = $pdo->prepare('SELECT SUM(total_price) AS subtotal FROM shopping_cart WHERE customer_id = :user_id');
+    $stmtSubtotal->execute([':user_id' => $user_id]);
+    $result = $stmtSubtotal->fetch(PDO::FETCH_ASSOC);
+    $subtotal = $result['subtotal'] ?? 0;
+}
 
 // Fetch default place for shipping
 $stmt = $pdo->prepare('SELECT place FROM users_credentials WHERE id = :user_id');
@@ -74,10 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delivery'])) {
     $selected_option = $_SESSION['selected_option'] ?? 'jnt';
 }
 
-// Calculate shipping fee
 $shippingfee = $rates[$selected_option][$place] ?? 0;
-
-// Total amount
 $total = $subtotal + $shippingfee;
 
 
@@ -123,7 +136,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['proof'])) {
             $pdo->rollBack();
             echo '<div class="alert alert-danger">' . htmlspecialchars($e->getMessage()) . '</div>';
     
-        exit; // Stop further processing for this POST request
+        exit; 
     }
 }
 
@@ -132,17 +145,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['proof'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
     try {
         $pdo->beginTransaction();
-       
-
         // Insert order details into order_details table
         $stmt = $pdo->prepare("
-            INSERT INTO order_details (order_num, customer_id, sub_total, total_price, delivery_option, payment) 
-            VALUES (:order_num, :customer_id, :sub_total, :total_price, :delivery_option, :payment)
+            INSERT INTO order_details ( customer_id, sub_total, shipping_fee, total_price, delivery_option, payment) 
+            VALUES ( :customer_id, :sub_total, :shipping_fee, :total_price, :delivery_option, :payment)
         ");
         $stmt->execute([
-            ':order_num' => $order_num,
+
             ':customer_id' => $user_id,
             ':sub_total' => $subtotal,
+            ':shipping_fee'=> $shippingfee,
             ':total_price' => $total,
             ':delivery_option' => $selected_option,
             ':payment' => $payment_id ?? null
@@ -150,6 +162,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
         $order_num = $pdo->lastInsertId();
         // Insert each cart item into order_items table
         foreach ($cart_items as $product) {
+
+                                    // Check current inventory
+                                    $stmt = $pdo->prepare("SELECT quantity FROM products WHERE product_id = :product_id");
+                                    $stmt->execute([':product_id' => $product['product_id']]);
+                                    $current_stock = $stmt->fetchColumn();
+                        
+                                    if ($current_stock === false) {
+                                        throw new Exception("Product ID {$product['product_id']} not found in inventory.");
+                                    }
+                        
+                                    if ($current_stock < $product['quantity']) {
+                                        throw new Exception("Insufficient stock for product: {$product['product']}. Available: $current_stock.");
+                                    }
+                        
+                                    // Subtract quantity from inventory
+                                    $new_stock = $current_stock - $product['quantity'];
+                                    $stmt = $pdo->prepare("
+                                        UPDATE products 
+                                        SET quantity = :new_stock 
+                                        WHERE product_id = :product_id
+                                    ");
+                                    $stmt->execute([
+                                        ':new_stock' => $new_stock,
+                                        ':product_id' => $product['product_id']
+                                    ]);
+
+                                            // Update product_revenue table
+            $stmt = $pdo->prepare("
+            SELECT items_sold, total_revenue FROM product_revenue WHERE product_id = :product_id
+            ");
+            $stmt->execute([':product_id' => $product['product_id']]);
+            $revenue = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($revenue) {
+                // Existing revenue record
+                $new_items_sold = $revenue['items_sold'] + $product['quantity'];
+                $new_total_revenue = $revenue['total_revenue'] + $product['total_price'];
+
+                $stmt = $pdo->prepare("
+                    UPDATE product_revenue 
+                    SET items_sold = :items_sold, total_revenue = :total_revenue 
+                    WHERE product_id = :product_id
+                ");
+                $stmt->execute([
+                    ':items_sold' => $new_items_sold,
+                    ':total_revenue' => $new_total_revenue,
+                    ':product_id' => $product['product_id']
+                ]);
+            } else {
+                // Insert new revenue record if not exists
+                $stmt = $pdo->prepare("
+                    INSERT INTO product_revenue (product_id, items_sold, total_revenue) 
+                    VALUES (:product_id, :items_sold, :total_revenue)
+                ");
+                $stmt->execute([
+                    ':product_id' => $product['product_id'],
+                    ':items_sold' => $product['quantity'],
+                    ':total_revenue' => $product['total_price']
+                ]);
+            }
+
+            ///
             $stmt = $pdo->prepare("
                 INSERT INTO order_items (order_num, product_id, product_name, color, quantity) 
                 VALUES (:order_num, :product_id, :product_name, :color, :quantity)
@@ -161,6 +235,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
                 ':color' => $product['color'],
                 ':quantity' => $product['quantity']
             ]);
+
         }
         
         $pdo->commit();
@@ -180,6 +255,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
     }
     exit;
 }
+
+// Fetch unread notifications
+$query_notifications = "SELECT notif_id, message FROM notifications WHERE id = ? AND is_read = 0";
+$stmt_notifications = $pdo->prepare($query_notifications);
+$stmt_notifications->bindValue(1, $user_id, PDO::PARAM_INT);
+$stmt_notifications->execute();
+$result_notifications = $stmt_notifications->fetchAll(PDO::FETCH_ASSOC);
+
+if (isset($_GET['notif_id']) && is_numeric($_GET['notif_id'])) {
+    $notif_id = intval($_GET['notif_id']);
+
+    $query_check_notif = "SELECT notif_id FROM notifications WHERE notif_id = ? AND id = ?";
+    $stmt_check_notif = $pdo->prepare($query_check_notif);
+    $stmt_check_notif->execute([$notif_id, $user_id]);
+
+    if ($stmt_check_notif->rowCount() > 0) {
+        // Mark the notification as read
+        $query_update_read = "UPDATE notifications SET is_read = 1 WHERE notif_id = ?";
+        $stmt_update_read = $pdo->prepare($query_update_read);
+        $stmt_update_read->execute([$notif_id]);
+
+        echo json_encode(['status' => 'success', 'message' => 'Notification marked as read']);
+    } else {
+        echo json_encode(['status' => 'error', 'message' => 'Notification not found or does not belong to this user']);
+    }
+}
+
+// Query to count unread notifications
+$query_count_unread = "SELECT COUNT(*) FROM notifications WHERE id = ? AND is_read = 0";
+$stmt_count_unread = $pdo->prepare($query_count_unread);
+$stmt_count_unread->bindValue(1, $user_id, PDO::PARAM_INT);
+$stmt_count_unread->execute();
+$unread_count = $stmt_count_unread->fetchColumn();
 ?>
 
 <!DOCTYPE html>
@@ -190,6 +298,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link rel="stylesheet"/>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
     <link rel="icon" href="PIC/sndlogo.png" type="logo" />
     <title>Checkout</title>
     <style>
@@ -206,6 +315,7 @@ body {
     overflow-y: auto;
     margin: 0;
     padding: 150px 0 0; /* Add top padding for fixed header */
+    font-family: "Playfair Display", serif;
 }
 
 .navbar {
@@ -482,6 +592,47 @@ form .btn-success {
     font-size: 2em;
     z-index: 9999;
     }
+
+    #notification-dropdown {
+    position: absolute;
+    top: 70px; /* Adjust as per your layout */
+    right: 20px;
+    width: 200px;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+    display: none; /* Initially hidden */
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+#notification-dropdown li {
+    padding: 10px 16px;
+    color: #333;
+    cursor: pointer;
+}
+
+#notification-dropdown li:hover {
+    background-color: #f1e8d9;
+}
+
+.badge-danger {
+    background-color: #dc3545;
+    color: white;
+    font-size: 14px;
+    padding: 4px 8px;
+    border-radius: 50%;
+}
+#unread-count {
+    display: inline-block; /* Ensures it's visible initially */
+    background: red;
+    color: white;
+    border-radius: 50%;
+    padding: 2px 5px;
+    font-size: 12px;
+    position: absolute;
+    margin-left:-10px;
+}
     </style>
   </head>
 
@@ -496,22 +647,33 @@ form .btn-success {
             </button>
             <div class="collapse navbar-collapse" id="navbarContent">
                 <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
-                    <li class="nav-item">
-                        <a class="nav-link" href="#">
-                            <img src="/SnD_Shoppe-main/Assets/svg(icons)/notifications.svg" alt="Notifications">
+                <li class="nav-item">
+                        <a class="nav-link nav-link-black" href="#" id="notification-icon">
+                            <img src="Assets/svg(icons)/notifications.svg" alt="notif">
+                            <?php if ($unread_count > 0): ?>
+                                <span class="badge badge-danger" id="unread-count"><?php echo $unread_count; ?></span>
+                            <?php endif; ?>
                         </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#">
-                            <img src="/SnD_Shoppe-main/Assets/svg(icons)/inbox.svg" alt="Inbox">
-                        </a>
+                        <ul id="notification-dropdown">
+                            <?php
+                            if (empty($result_notifications)) {
+                                echo '<li>No new notifications</li>';
+                            } else {
+                            foreach ($result_notifications as $notification) {
+                                echo '<li data-notif-id="' . htmlspecialchars($notification['notif_id']) . '">' 
+                                    . htmlspecialchars($notification['message']) . '</li>';
+                            } }
+                            ?>
+                        </ul>
                     </li>
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="accountDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <img src="/SnD_Shoppe-main/Assets/svg(icons)/account_circle.svg" alt="Account">
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="accountDropdown">
-                            <li><a class="dropdown-item" href="accountSettings.php">My Account</a></li>
+                            <li><a class="dropdown-item" href="mypurchase.php">My Account</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="homepage.php">Home</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item text-danger" href="logout.php">Logout</a></li>
                         </ul>
@@ -565,17 +727,17 @@ form .btn-success {
                     <div class="mb-3">
                         <label for="shipping-option" class="form-label">Select Shipping Option</label>
                         <form method="POST" action="">
-    <select class="form-select" name="delivery" id="shipping-option" required onchange="this.form.submit()">
-        <option value="jnt" <?php echo ($selected_option === 'jnt') ? 'selected' : ''; ?>>J&T Express</option>
-        <option value="ninja-van" <?php echo ($selected_option === 'ninja-van') ? 'selected' : ''; ?>>Ninja Van</option>
-        <option value="lbc" <?php echo ($selected_option === 'lbc') ? 'selected' : ''; ?>>LBC</option>
-    </select>
-</form>
-</div>
+                            <select class="form-select" name="delivery" id="shipping-option" required onchange="this.form.submit()">
+                                <option value="jnt" <?php echo ($selected_option === 'jnt') ? 'selected' : ''; ?>>J&T Express</option>
+                                <option value="ninja-van" <?php echo ($selected_option === 'ninja-van') ? 'selected' : ''; ?>>Ninja Van</option>
+                                <option value="lbc" <?php echo ($selected_option === 'lbc') ? 'selected' : ''; ?>>LBC</option>
+                            </select>
+                        
+                    
                     
                   <!--payment option-->
                     <h4 class="mb-4">Select Payment Option To Place Order</h4>
-                    <form method="POST" action="">
+                    
                       <div class="mb-3">
                         <label for="payment-option" class="form-label"
                           >Payment Method</label>
@@ -585,6 +747,7 @@ form .btn-success {
                           <option value="Maya">Maya</option>
                         </select>
                       </div>
+                </div>
             </div>
         </div>
 
@@ -592,20 +755,20 @@ form .btn-success {
           <!-- Order Summary -->
 <div class="col-lg-4 col-md-12">
     <div class="p-4 border rounded shadow-sm bg-light order-summary">
-        <h4 class="mb-4">Order Summary</h4>
+    <h4 class="mb-4">Order Summary</h4>
         <?php foreach ($cart_items as $item): ?>
             <div class="d-flex justify-content-between">
-                <p><?php echo htmlspecialchars($item['product']); ?> (<?php echo htmlspecialchars($item['color']); ?>)</p>
-                <p class="fw-bold"><?php echo htmlspecialchars($item['quantity']); ?></p>
+                <p style="font-weight: bold; margin-top: 15px;"><?php echo htmlspecialchars($item['product']); ?> (<?php echo htmlspecialchars($item['color']); ?>)</p>
+                <p class="fw-bold" style="margin-top: 15px;"><?php echo htmlspecialchars($item['quantity']); ?></p>
             </div>
         <?php endforeach; ?>
         <hr />
-        <div class="d-flex justify-content-between">
-            <p>Subtotal</p>
-            <p class="subtotal fw-bold">₱<?php echo number_format($subtotal, 2); ?></p>
+        <div class="d-flex justify-content-between" style="margin-bottom: 15px; margin-top: -8px;">
+            <p style="font-size: 17px; font-weight:normal">Subtotal</p>
+            <p class="subtotal fw-bold" style="font-size: 17px; color:#dcaa2e;">₱<?php echo number_format($subtotal, 2); ?></p>
         </div>
         <div class="d-flex justify-content-between">
-            <p>Shipping Fee</p>
+            <p style="font-size: 17px; font-weight:normal">Shipping Fee</p>
             <p class="subtotal fw-bold">₱<?php echo number_format($shippingfee, 2); ?></p>
         </div>
         <div class="d-flex justify-content-between">
@@ -771,6 +934,61 @@ form .btn-success {
             mayaModal.show();
         }
     });
+
+    </script>
+    <script>
+    $(document).ready(function () {
+    // Handle notification item click
+    $('#notification-dropdown').on('click', 'li', function () {
+        var notifId = $(this).data('notif-id'); // Get notif_id from the clicked notification
+
+        if (notifId) {
+            // Make an AJAX request to mark the notification as read
+            $.ajax({
+                url: 'homepage.php', // PHP script to handle notification read
+                method: 'GET',
+                data: { notif_id: notifId },
+                success: function (response) {
+                    var result = JSON.parse(response);
+
+                    if (result.status === 'success') {
+                        // Remove the clicked notification
+                        $('li[data-notif-id="' + notifId + '"]').remove();
+
+                        // Update the unread count
+                        var unreadCountElement = $('#unread-count');
+                        var unreadCount = parseInt(unreadCountElement.text(), 10);
+
+                        if (unreadCount > 1) {
+                            unreadCountElement.text(unreadCount - 1);
+                        } else {
+                            unreadCountElement.fadeOut(); // Hide the badge when count reaches 0
+                        }
+                    } else {
+                        console.error('Error: ' + result.message);
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.error('AJAX error:', error);
+                }
+            });
+        }
+    });
+
+    // Toggle notification dropdown visibility
+    $('#notification-icon').on('click', function (e) {
+        e.preventDefault();
+        $('#notification-dropdown').toggle(); // Toggle dropdown visibility
+    });
+
+    // Close dropdown when clicking outside
+    $(document).on('click', function (e) {
+        if (!$('#notification-icon').is(e.target) && $('#notification-icon').has(e.target).length === 0 &&
+            !$('#notification-dropdown').is(e.target) && $('#notification-dropdown').has(e.target).length === 0) {
+            $('#notification-dropdown').hide();
+        }
+    });
+});
     </script>
       
   </body>
