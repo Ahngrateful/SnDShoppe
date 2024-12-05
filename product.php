@@ -32,7 +32,7 @@ $user_email = $_SESSION['user_email'];
 $product_id = isset($_GET['product_id']) ? intval($_GET['product_id']) : 0;
 
 // Query to get the main product details
-$stmt = $pdo->prepare('SELECT product_name, price, quantity, product_descript FROM products WHERE product_id = :product_id');
+$stmt = $pdo->prepare('SELECT product_name, price, quantity, product_descript, roll_price FROM products WHERE product_id = :product_id');
 $stmt->execute(['product_id' => $product_id]);
 $product = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -69,6 +69,40 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['cart'])) {
     // Redirect to cart page after adding to cart
     header("Location: cart.php");
     
+}
+
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['buy'])) {
+    $quantity = isset($_POST['qty']) ? intval($_POST['qty']) : 1;
+    $color = isset($_POST['color']) ? $_POST['color'] : '';
+    $total_price = $product['price'] * $quantity;
+
+    // Insert into shopping_cart table
+    $stmt = $pdo->prepare("INSERT INTO shopping_cart (product_id, product, unit_price, quantity, customer_id, lastname, firstname, color, total_price) 
+                           VALUES (:product_id, :product_name, :price, :quantity, :customer_id, :lastname, :firstname, :color, :total_price)");
+    $stmt->execute([
+        ':product_id' => $product_id,
+        ':product_name' => $product['product_name'],
+        ':price' => $product['price'],
+        ':quantity' => $quantity,
+        ':customer_id' => $user_id,
+        ':lastname' => $user['lastname'],
+        ':firstname' => $user['firstname'],
+        ':color' => $color,
+        ':total_price' => $total_price
+    ]);
+
+    // Fetch the last inserted item for the current user
+    $stmt = $pdo->prepare("SELECT cart_id FROM shopping_cart WHERE customer_id = :customer_id ORDER BY cart_id DESC LIMIT 1");
+    $stmt->execute([':customer_id' => $user_id]);
+    $last_item = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($last_item) {
+        // Redirect to checkout page with the cart_id of the last item
+        header("Location: checkout.php?cart_id=" . $last_item['cart_id']);
+    } else {
+        echo "Error: Unable to fetch the last item.";
+    }
+    exit;
 }
 
 // Handle form submission
@@ -175,30 +209,64 @@ if ($ratingFilter > 0) {
 // Fetch all reviews
 $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['buy'])) {
-    $quantity = isset($_POST['qty']) ? intval($_POST['qty']) : 1;
-    $color = isset($_POST['color']) ? $_POST['color'] : '';
-    $total_price = $product['price'] * $quantity;
 
-    // Insert into shopping_cart table
-    $stmt = $pdo->prepare("INSERT INTO shopping_cart (product_id, product, unit_price, quantity, customer_id, lastname, firstname, color, total_price) 
-                           VALUES (:product_id, :product_name, :price, :quantity, :customer_id, :lastname, :firstname, :color, :total_price)");
-    $stmt->execute([
-        ':product_id' => $product_id,
-        ':product_name' => $product['product_name'],
-        ':price' => $product['price'],
-        ':quantity' => $quantity,
-        ':customer_id' => $user_id,
-        ':lastname' => $user['lastname'],
-        ':firstname' => $user['firstname'],
-        ':color' => $color,
-        ':total_price' => $total_price
-    ]);
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['bulk'])) {
+    try {
+        $stmt = $pdo->prepare("INSERT INTO bulk_shopping_cart (product_id, product, customer_id, firstname, lastname, unit_price, roll_price) 
+            VALUES (:product_id, :product_name, :customer_id, :firstname, :lastname, :price, :roll_price)
+        ");
+        $stmt->execute([
+            ':product_id' => $product_id,                  
+            ':product_name' => $product['product_name'],  
+            ':customer_id' => $user_id,                  
+            ':firstname' => $user['firstname'],          
+            ':lastname' => $user['lastname'],            
+            ':price' => $product['price'],
+            ':roll_price' => $product['roll_price']
+        ]);
 
-    // Redirect to cart page after adding to cart
-    header("Location: checkout.php");
-    exit;
+        // Redirect to the bulk order cart page
+        header("Location: bulkorder.php");
+        exit;
+    } catch (PDOException $e) {
+        // Handle SQL errors
+        echo "Error: " . htmlspecialchars($e->getMessage());
+    }
 }
+
+// Fetch unread notifications
+$query_notifications = "SELECT notif_id, message FROM notifications WHERE id = ? AND is_read = 0";
+$stmt_notifications = $pdo->prepare($query_notifications);
+$stmt_notifications->bindValue(1, $user_id, PDO::PARAM_INT);
+$stmt_notifications->execute();
+$result_notifications = $stmt_notifications->fetchAll(PDO::FETCH_ASSOC);
+
+if (isset($_GET['notif_id']) && is_numeric($_GET['notif_id'])) {
+    $notif_id = intval($_GET['notif_id']);
+
+    $query_check_notif = "SELECT notif_id FROM notifications WHERE notif_id = ? AND id = ?";
+    $stmt_check_notif = $pdo->prepare($query_check_notif);
+    $stmt_check_notif->execute([$notif_id, $user_id]);
+
+    if ($stmt_check_notif->rowCount() > 0) {
+        // Mark the notification as read
+        $query_update_read = "UPDATE notifications SET is_read = 1 WHERE notif_id = ?";
+        $stmt_update_read = $pdo->prepare($query_update_read);
+        $stmt_update_read->execute([$notif_id]);
+
+        echo json_encode(['status' => 'success', 'message' => 'Notification marked as read']);
+    } else {
+        echo json_encode(['status' => 'error', 'message' => 'Notification not found or does not belong to this user']);
+    }
+}
+
+// Query to count unread notifications
+$query_count_unread = "SELECT COUNT(*) FROM notifications WHERE id = ? AND is_read = 0";
+$stmt_count_unread = $pdo->prepare($query_count_unread);
+$stmt_count_unread->bindValue(1, $user_id, PDO::PARAM_INT);
+$stmt_count_unread->execute();
+$unread_count = $stmt_count_unread->fetchColumn();
+
 
 ?>
 
@@ -212,6 +280,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['buy'])) {
     <link rel="stylesheet" >
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
     <title>S&D Fabrics</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Kumbh+Sans:wght@100..900&family=Playfair+Display+SC:ital,wght@0,400;0,700;0,900;1,400;1,700;1,900&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900&display=swap');
@@ -226,6 +295,7 @@ body {
     overflow-y: auto; 
     margin: 0; 
     padding: 0; 
+    font-family: "Playfair Display", serif;
 }
 
 .navbar {
@@ -506,6 +576,7 @@ button {
 .qty input {
     text-align: center;
     width: 20%;
+    font-size: 17px;
 }
 
 /* For Chrome, Edge, Safari */
@@ -519,12 +590,13 @@ input[type=number]::-webkit-outer-spin-button {
     width: auto; 
     height: auto;
 	color: #1e1e1e;
-	font-size: 10px;
+	font-size: 15px;
     background-color: #dcc07a;
 }
 
 .qty label {
     margin-right: 10px;
+    font-size: 15px;
 }
 
 .details {
@@ -964,6 +1036,47 @@ input[type=number]::-webkit-outer-spin-button {
         height: 25px;
     }
 }
+#notification-dropdown {
+    position: absolute;
+    top: 70px; /* Adjust as per your layout */
+    right: 20px;
+    width: 200px;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+    display: none; /* Initially hidden */
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+#notification-dropdown li {
+    padding: 10px 16px;
+    color: #333;
+    cursor: pointer;
+}
+
+#notification-dropdown li:hover {
+    background-color: #f1e8d9;
+}
+
+.badge-danger {
+    background-color: #dc3545;
+    color: white;
+    font-size: 14px;
+    padding: 4px 8px;
+    border-radius: 50%;
+}
+#unread-count {
+    display: inline-block; /* Ensures it's visible initially */
+    background: red;
+    color: white;
+    border-radius: 50%;
+    padding: 2px 5px;
+    font-size: 12px;
+    position: absolute;
+    margin-left:-10px;
+  
+}
         </style>
 </head>
 <body class="vh-100">
@@ -979,33 +1092,32 @@ input[type=number]::-webkit-outer-spin-button {
             </button>
 
             <div class="collapse navbar-collapse" id="navbarTogglerDemo01">
-                <div class="mx-auto d-flex justify-content-center flex-grow-1">
-                    <form class="search-bar" role="search">
-                        <div class="input-group">
-                            <span class="input-group-text" id="basic-addon1">
-                                <i class="bi bi-search search-icon"></i>
-                            </span>
-                            <input class="form-control" type="search" placeholder="Search..." aria-label="Search" aria-describedby="basic-addon1">
-                        </div>
-                    </form>
-                </div>
-
                 <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
                     <li class="nav-item">
-                        <a class="nav-link nav-link-black active" aria-current="page" href="#">
+                        <a class="nav-link nav-link-black active" aria-current="page" href="cart.php">
                             <img src="Assets/svg(icons)/shopping_cart.svg" alt="cart">
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link nav-link-black" href="#">
+                        <a class="nav-link nav-link-black" href="#" id="notification-icon">
                             <img src="Assets/svg(icons)/notifications.svg" alt="notif">
+                            <?php if ($unread_count > 0): ?>
+                                <span class="badge badge-danger" id="unread-count"><?php echo $unread_count; ?></span>
+                            <?php endif; ?>
                         </a>
+                        <ul id="notification-dropdown">
+                            <?php
+                            if (empty($result_notifications)) {
+                                echo '<li>No new notifications</li>';
+                            } else {
+                            foreach ($result_notifications as $notification) {
+                                echo '<li data-notif-id="' . htmlspecialchars($notification['notif_id']) . '">' 
+                                    . htmlspecialchars($notification['message']) . '</li>';
+                            } }
+                            ?>
+                        </ul>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link nav-link-black" href="#">
-                            <img src="Assets/svg(icons)/inbox.svg" alt="inbox">
-                        </a>
-                    </li>
+
 
                     <!-- Account Dropdown Menu -->
                     <li class="nav-item dropdown">
@@ -1013,7 +1125,7 @@ input[type=number]::-webkit-outer-spin-button {
                             <img src="Assets/svg(icons)/account_circle.svg" alt="account">
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="accountDropdown">
-                            <li><a class="dropdown-item" href="accountSettings.php">Account & Security</a></li>
+                            <li><a class="dropdown-item" href="mypurchase.php">My Account</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item text-danger" href="haveacc.php">Logout</a></li>
                         </ul>
@@ -1049,6 +1161,7 @@ input[type=number]::-webkit-outer-spin-button {
             <div class="col-md-6 product-details">
                 <h1><?= htmlspecialchars($product['product_name']) ?></h1>
                 <p>Price: <span class="price-tag"><?= htmlspecialchars($product['price']) ?></span> per yard</p>
+                <p>Roll Price: <span class="price-tag"><?= htmlspecialchars($product['roll_price']) ?></span> per roll</p>
                 <p>Available Stocks: <span><?= htmlspecialchars($product['quantity']) ?> Yards</span></p>
 
                 <!-- Color Options Section -->
@@ -1067,7 +1180,7 @@ input[type=number]::-webkit-outer-spin-button {
                 <input type="hidden" name="color" value="">
                 <div class="counter-qty">
                         <p class="qty">
-                            <label for="qty">Quantity:</label>
+                            <label for="qty">Quantity <br>(Max. of 29 Yards):</label>
                             <button class="qtyminus" aria-hidden="true">&minus;</button>
                             <input type="number" name="qty" id="qty" min="1" max="100" step="1" value="1">
                             <button class="qtyplus" aria-hidden="true">&plus;</button>
@@ -1079,15 +1192,17 @@ input[type=number]::-webkit-outer-spin-button {
                         <img src="Assets/svg(icons)/shopping_cart.svg" alt="cart"> Add To Cart
                     </button>
                 
-                    </form>
-                        <form method="POST" action="">
-                        <button class="btn-custom buy-now" name="buy">Buy Now</button>
+                        <button type= "submit"class="btn-custom" name="buy">Buy Now</button>
                         </div>
                     </form>
 
-                    <button type="submit" class="btn-custom" name="bulk" style="margin-left: 90px;">
-                        <img src="Assets/svg(icons)/shopping_cart.svg" alt="cart">Bulk Order
-                    </button>
+                    <p style="margin-left: 60px; margin-bottom: -5px">Want to order 30+ Yards or per Roll?</p>
+                    
+                    <form method="POST" action="">
+                        <button type="submit" class="btn-custom" name="bulk" style="margin-left: 90px;">
+                            <img src="Assets/svg(icons)/shopping_cart.svg" alt="bulk">Bulk Order
+                        </button>
+                    </form>
 
                 </div>
                 
@@ -1324,6 +1439,60 @@ function closeForm() {
     }, 300); // Match the transition duration
     document.getElementById("overlay").classList.remove("show");
 }
+</script>
+<script>
+$(document).ready(function () {
+    // Handle notification item click
+    $('#notification-dropdown').on('click', 'li', function () {
+        var notifId = $(this).data('notif-id'); // Get notif_id from the clicked notification
+
+        if (notifId) {
+            // Make an AJAX request to mark the notification as read
+            $.ajax({
+                url: 'homepage.php', // PHP script to handle notification read
+                method: 'GET',
+                data: { notif_id: notifId },
+                success: function (response) {
+                    var result = JSON.parse(response);
+
+                    if (result.status === 'success') {
+                        // Remove the clicked notification
+                        $('li[data-notif-id="' + notifId + '"]').remove();
+
+                        // Update the unread count
+                        var unreadCountElement = $('#unread-count');
+                        var unreadCount = parseInt(unreadCountElement.text(), 10);
+
+                        if (unreadCount > 1) {
+                            unreadCountElement.text(unreadCount - 1);
+                        } else {
+                            unreadCountElement.fadeOut(); // Hide the badge when count reaches 0
+                        }
+                    } else {
+                        console.error('Error: ' + result.message);
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.error('AJAX error:', error);
+                }
+            });
+        }
+    });
+
+    // Toggle notification dropdown visibility
+    $('#notification-icon').on('click', function (e) {
+        e.preventDefault();
+        $('#notification-dropdown').toggle(); // Toggle dropdown visibility
+    });
+
+    // Close dropdown when clicking outside
+    $(document).on('click', function (e) {
+        if (!$('#notification-icon').is(e.target) && $('#notification-icon').has(e.target).length === 0 &&
+            !$('#notification-dropdown').is(e.target) && $('#notification-dropdown').has(e.target).length === 0) {
+            $('#notification-dropdown').hide();
+        }
+    });
+});
 
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
