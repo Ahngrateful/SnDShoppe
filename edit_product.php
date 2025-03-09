@@ -1,10 +1,22 @@
 <?php
+session_start();
 // Database connection
-$conn = new mysqli("localhost", "root", "", "db_sdshoppe");
+$servername = "localhost";
+$username = "root";
+$password = "";
+$dbname = "db_sdshoppe";
+
+$conn = new mysqli($servername, $username, $password, $dbname);
 
 // Check connection
 if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
+}
+
+// Check if admin is logged in
+if (!isset($_SESSION['admin_id'])) {
+  header("Location: haveacc.php"); // Redirect to login if not logged in
+  exit;
 }
 
 // Fetch product details
@@ -28,11 +40,10 @@ if (isset($_GET['id'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $product_name = $_POST['product_name'];
     $price = $_POST['price'];
-    $quantity = $_POST['quantity'];
 
-    $sql = "UPDATE products SET product_name = ?, price = ?, quantity = ? WHERE product_id = ?";
+    $sql = "UPDATE products SET product_name = ?, price = ? WHERE product_id = ?";
     $stmt = $conn->prepare($sql);
-    $stmt->bind_param("sdii", $product_name, $price, $quantity, $product_id);
+    $stmt->bind_param("sdi", $product_name, $price, $product_id);
 
     if ($stmt->execute()) {
         echo "Product updated successfully.";
@@ -162,8 +173,6 @@ button:active {
         <input type="text" name="product_name" value="<?= htmlspecialchars($product['product_name']) ?>" required><br>
         <label>Price:</label>
         <input type="number" step="0.01" name="price" value="<?= $product['price'] ?>" required><br>
-        <label>Quantity:</label>
-        <input type="number" name="quantity" value="<?= $product['quantity'] ?>" required><br>
         <button type="submit">Save Changes</button>
     </form>
 </body>
