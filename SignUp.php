@@ -12,7 +12,7 @@ $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 if (isset($_POST['create'])) {
     $id = $_SESSION['user_id'] ?? rand(1, 1000); // Fallback for testing
     $email = $_POST['email'];
-    $password = $_POST['psw'];
+    $password = trim($_POST['psw']);
     $repeat_password = $_POST['psw-repeat'];
     $birthdate = $_POST['dob'];
     $gender = $_POST['gender'];
@@ -23,6 +23,15 @@ if (isset($_POST['create'])) {
     $city =  $_POST['city'];
     $place =  $_POST['place'];
     $phone = $_POST['phone'];
+
+    $password_pattern = "/^(?=.*[A-Z])(?=.*\d)[A-Za-z\d!@#$%^&*()_+]{12,}$/";
+    if (!preg_match($password_pattern, $password)) { 
+        echo "<script>
+                alert('Password must be at least 12 characters long, include at least one uppercase letter and one number.');
+                window.history.back();
+              </script>";
+        exit;
+    }
 
     // Check if passwords match
     if ($password !== $repeat_password) {
@@ -45,7 +54,7 @@ if (isset($_POST['create'])) {
                     document.addEventListener('DOMContentLoaded', function() {
                         document.getElementById('overlay').style.display = 'flex';
                         setTimeout(function() {
-                            window.location.href = 'sndLandingpage.php';
+                            window.location.href = 'index.php';
                         }, 3000);
                     });
                   </script>";
@@ -69,7 +78,7 @@ if (isset($_POST['cancel'])) {
 
         // Check if a row was deleted and redirect
         if ($rowsAffected) {
-            header("Location: sndLandingpage.php");
+            header("Location: index.php");
             exit;
         } else {
             echo "No rows were deleted.";
@@ -94,7 +103,7 @@ if (isset($_POST['cancel'])) {
     .containersignup {
         width: 100%;
         padding: 16px;
-        background: radial-gradient(#fff,#F9F9D5);
+        background: url(PIC/bgLogin.png) rgba(0, 0, 0, 0.3);
     }
 
     .s_login-form {
