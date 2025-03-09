@@ -21,9 +21,11 @@ if (!isset($_SESSION['user_id'])) {
 $user_id = $_SESSION['user_id'];
 
 // Get the product details in the bulk shopping cart for the logged-in user
-$stmt = $pdo->prepare('SELECT bulk_cart_id, product_id, product, unit_price, roll_price, rolls, yards, color, item_subtotal, delivery_method, delivery_date, payment_method FROM bulk_shopping_cart WHERE customer_id = :user_id');
+
+$stmt = $pdo->prepare('SELECT bulk_cart_id, product_id, product, unit_price, roll_price, rolls, yards, color, color_id, item_subtotal, delivery_method, delivery_date, payment_method FROM bulk_shopping_cart WHERE customer_id = :user_id');
 $stmt->execute(['user_id' => $user_id]);
 $bulk_items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
 
 $stmt = $pdo->prepare('SELECT delivery_method, delivery_date, payment_method FROM bulk_shopping_cart WHERE customer_id = :user_id LIMIT 1');
 $stmt->execute(['user_id' => $user_id]);
@@ -122,26 +124,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
         // Insert each cart item into bulk_order_items table
         foreach ($bulk_items as $product) {
 
-            // Check current inventory
-            $stmt = $pdo->prepare("SELECT quantity FROM products WHERE product_id = :product_id");
-            $stmt->execute([':product_id' => $product['product_id']]);
-            $current_stock = $stmt->fetchColumn();
+            $color_id = $product['color_id'] ?? null;
 
-            if ($current_stock === false) {
-                throw new Exception("Product ID {$product['product_id']} not found in inventory.");
-            }
+    if (!$color_id) {
+        throw new Exception("Color ID not found for product {$product['product']}.");
+    }
 
-            // Subtract quantity from inventory
-            $new_stock = $current_stock - $product['yards'];
-            $stmt = $pdo->prepare("
-                UPDATE products 
-                SET quantity = :new_stock 
-                WHERE product_id = :product_id
-            ");
-            $stmt->execute([
-                ':new_stock' => $new_stock,
-                ':product_id' => $product['product_id']
-            ]);
+    // Check inventory
+    $stmt = $pdo->prepare("SELECT yards, rolls FROM product_colors WHERE color_id = :color_id");
+    $stmt->execute([':color_id' => $color_id]);
+    $current_stock = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$current_stock) {
+        throw new Exception("Color ID {$color_id} not found in inventory.");
+    }
+
+    $current_yards = $current_stock['yards'];
+    $current_rolls = $current_stock['rolls'];
+
+    if ($current_yards < $product['yards']) {
+        throw new Exception("Insufficient yards for Color ID {$color_id}. Available: $current_yards, Required: {$product['yards']}.");
+    }
+
+    if ($current_rolls < $product['rolls']) {
+        throw new Exception("Insufficient rolls for Color ID {$color_id}. Available: $current_rolls, Required: {$product['rolls']}.");
+    }
+
+    // Update stock
+    $new_yards = $current_yards - $product['yards'];
+    $new_rolls = $current_rolls - $product['rolls'];
+
+    $stmt = $pdo->prepare("
+        UPDATE product_colors 
+        SET yards = :new_yards, rolls = :new_rolls 
+        WHERE color_id = :color_id
+    ");
+    $stmt->execute([
+        ':new_yards' => $new_yards,
+        ':new_rolls' => $new_rolls,
+        ':color_id' => $color_id
+    ]);
 
              // Update product_revenue table
            $stmt = $pdo->prepare("
@@ -205,7 +227,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cod_place_order'])) {
     try {
         $pdo->beginTransaction();
-        $payment_id = 11220000; // Default payment_id for COD payment_method
+       $payment_id = 11220000; // Default payment_id for COD payment_method
+      
+$payment_id = $pdo->lastInsertId();
 
             // Insert into bulk_order_details table
             $stmt = $pdo->prepare("
@@ -225,26 +249,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cod_place_order'])) {
 
         // Insert each cart item into bulk_order_items table
         foreach ($bulk_items as $product) {
-            // Check current inventory
-            $stmt = $pdo->prepare("SELECT quantity FROM products WHERE product_id = :product_id");
-            $stmt->execute([':product_id' => $product['product_id']]);
-            $current_stock = $stmt->fetchColumn();
+            $color_id = $product['color_id'] ?? null;
 
-            if ($current_stock === false) {
-                throw new Exception("Product ID {$product['product_id']} not found in inventory.");
-            }
+    if (!$color_id) {
+        throw new Exception("Color ID not found for product {$product['product']}.");
+    }
 
-            // Subtract quantity from inventory
-            $new_stock = $current_stock - $product['yards'];
-            $stmt = $pdo->prepare("
-                UPDATE products 
-                SET quantity = :new_stock 
-                WHERE product_id = :product_id
-            ");
-            $stmt->execute([
-                ':new_stock' => $new_stock,
-                ':product_id' => $product['product_id']
-            ]);
+    // Check inventory
+    $stmt = $pdo->prepare("SELECT yards, rolls FROM product_colors WHERE color_id = :color_id");
+    $stmt->execute([':color_id' => $color_id]);
+    $current_stock = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$current_stock) {
+        throw new Exception("Color ID {$color_id} not found in inventory.");
+    }
+
+    $current_yards = $current_stock['yards'];
+    $current_rolls = $current_stock['rolls'];
+
+    if ($current_yards < $product['yards']) {
+        throw new Exception("Insufficient yards for Color ID {$color_id}. Available: $current_yards, Required: {$product['yards']}.");
+    }
+
+    if ($current_rolls < $product['rolls']) {
+        throw new Exception("Insufficient rolls for Color ID {$color_id}. Available: $current_rolls, Required: {$product['rolls']}.");
+    }
+
+    // Update stock
+    $new_yards = $current_yards - $product['yards'];
+    $new_rolls = $current_rolls - $product['rolls'];
+
+    $stmt = $pdo->prepare("
+        UPDATE product_colors 
+        SET yards = :new_yards, rolls = :new_rolls 
+        WHERE color_id = :color_id
+    ");
+    $stmt->execute([
+        ':new_yards' => $new_yards,
+        ':new_rolls' => $new_rolls,
+        ':color_id' => $color_id
+    ]);
 
              // Update product_revenue table
            $stmt = $pdo->prepare("
@@ -284,6 +328,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cod_place_order'])) {
                 ':rolls' => $product['rolls'], 
                 ':itemsubtotal' => $product['item_subtotal'],
             ]);
+
+
         }
 
         // Optionally clear the shopping cart after placing the order
@@ -686,7 +732,7 @@ form .btn-success {
     padding: 2px 5px;
     font-size: 12px;
     position: absolute;
-  
+    margin-left:-10px;
 }
     </style>
   </head>
@@ -723,7 +769,7 @@ form .btn-success {
                     </li>
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="accountDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <img src="/SnD_Shoppe-main/Assets/svg(icons)/account_circle.svg" alt="Account">
+                            <img src="Assets/svg(icons)/account_circle.svg" alt="Account">
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="accountDropdown">
                             <li><a class="dropdown-item" href="mypurhase.php">My Account</a></li>
@@ -888,7 +934,7 @@ form .btn-success {
 
             <?php
                 } else {
-                    echo "<p>Contact the Seller for the COD Payment and Delivery Methods. <a style='color: #dcaa2e;' href='sndLandingpage.php#aboutus'>Contact Details Here!</a></p>";
+                    echo "<p>Contact the Seller for the COD Payment and Delivery Methods. <a style='color: #dcaa2e;' href='#'>Contact Details Here!</a></p>"; 
                 }
             ?>
 
