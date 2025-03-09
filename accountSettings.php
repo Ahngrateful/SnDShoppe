@@ -9,28 +9,59 @@ if (!isset($_SESSION['user_id'])) {
 $user_id = $_SESSION['user_id'];
 $user_email = $_SESSION['user_email'];
 
-// Database connection
+// Database connection using PDO
 $servername = "localhost";
 $dbname = "db_sdshoppe";
 $username = "root";
 $password = "";
 
-$conn = new mysqli($servername, $username, $password, $dbname);
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
+try {
+    $pdo = new PDO("mysql:host=$servername;dbname=$dbname", $username, $password);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch (PDOException $e) {
+    die("Connection failed: " . $e->getMessage());
 }
 
 // Fetch user profile data
 $profile_data = [];
-$stmt = $conn->prepare("SELECT firstname, lastname, email, phone, gender, birthdate, address, subdivision,
+$stmt = $pdo->prepare("SELECT firstname, lastname, email, phone, gender, birthdate, address, subdivision,
 barangay, postal, city, place FROM users_credentials WHERE id = ?");
-$stmt->bind_param("i", $user_id);
+$stmt->bindParam(1, $user_id, PDO::PARAM_INT);
 $stmt->execute();
-$result = $stmt->get_result();
+$profile_data = $stmt->fetch(PDO::FETCH_ASSOC);
 
-if ($result->num_rows > 0) {
-    $profile_data = $result->fetch_assoc();
+// Fetch unread notifications
+$query_notifications = "SELECT notif_id, message, created_at FROM notifications WHERE id = ? AND is_read = 0 ORDER BY created_at DESC";
+$stmt_notifications = $pdo->prepare($query_notifications);
+$stmt_notifications->bindParam(1, $user_id, PDO::PARAM_INT);
+$stmt_notifications->execute();
+$result_notifications = $stmt_notifications->fetchAll(PDO::FETCH_ASSOC);
+
+if (isset($_GET['notif_id']) && is_numeric($_GET['notif_id'])) {
+    $notif_id = intval($_GET['notif_id']);
+
+    $query_check_notif = "SELECT notif_id FROM notifications WHERE notif_id = ? AND id = ?";
+    $stmt_check_notif = $pdo->prepare($query_check_notif);
+    $stmt_check_notif->execute([$notif_id, $user_id]);
+
+    if ($stmt_check_notif->rowCount() > 0) {
+        // Mark the notification as read
+        $query_update_read = "UPDATE notifications SET is_read = 1 WHERE notif_id = ?";
+        $stmt_update_read = $pdo->prepare($query_update_read);
+        $stmt_update_read->execute([$notif_id]);
+
+        echo json_encode(['status' => 'success', 'message' => 'Notification marked as read']);
+    } else {
+        echo json_encode(['status' => 'error', 'message' => 'Notification not found or does not belong to this user']);
+    }
 }
+
+// Query to count unread notifications
+$query_count_unread = "SELECT COUNT(*) FROM notifications WHERE id = ? AND is_read = 0";
+$stmt_count_unread = $pdo->prepare($query_count_unread);
+$stmt_count_unread->bindParam(1, $user_id, PDO::PARAM_INT);
+$stmt_count_unread->execute();
+$unread_count = $stmt_count_unread->fetchColumn();
 
 // Change password functionality
 $message = ""; // Variable to hold any status message
@@ -41,11 +72,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['update'])) {
     $confirm_password = $_POST['confirm_password'];
 
     // Fetch the current password from the database
-    $stmt = $conn->prepare("SELECT password FROM users_credentials WHERE id = ?");
-    $stmt->bind_param("i", $user_id);
+    $stmt = $pdo->prepare("SELECT password FROM users_credentials WHERE id = ?");
+    $stmt->bindParam(1, $user_id, PDO::PARAM_INT);
     $stmt->execute();
-    $result = $stmt->get_result();
-    $row = $result->fetch_assoc();
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($row) {
         // Check if the current password entered matches the password in the database
@@ -53,19 +83,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['update'])) {
             // Check if new password and confirm password match
             if ($new_password === $confirm_password) {
                 // Update the password in the database
-                $stmt = $conn->prepare("UPDATE users_credentials SET password = ? WHERE id = ?");
-                $stmt->bind_param("si", $new_password, $user_id);
+                $stmt = $pdo->prepare("UPDATE users_credentials SET password = ? WHERE id = ?");
+                $stmt->execute([$new_password, $user_id]);
                 
-                if ($stmt->execute()) {
-                    $message = "<div class='alert alert-success'>Password successfully updated.</div>";
-                } else {
-                    $message = "<div class='alert alert-danger'>Error updating password: " . htmlspecialchars($stmt->error) . "</div>";
-                }
+                echo "<script>alert('Password successfully updated.');</script>";
             } else {
-                $message = "<div class='alert alert-warning'>New passwords do not match.</div>";
+                echo "<script>alert('New passwords do not match.');</script>";
             }
         } else {
-            $message = "<div class='alert alert-warning'>Current password is incorrect.</div>";
+            echo "<script>alert('Current password is incorrect.');</script>";
+            
         }
     }
 }
@@ -84,18 +111,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save_profile'])) {
     $place =  $_POST['place'];
 
     // Update profile data in the database
-    $stmt = $conn->prepare("UPDATE users_credentials SET firstname = ?, lastname = ?, email = ?, phone = ?, birthdate = ?, address = ? WHERE id = ?");
-    $stmt->bind_param("ssssssi", $firstname, $lastname, $email, $phone, $birthdate, $address, $user_id);
-
-    if ($stmt->execute()) {
-        $message = "<div class='alert alert-success'>Profile updated successfully.</div>";
-    } else {
-        $message = "<div class='alert alert-danger'>Error updating profile: " . htmlspecialchars($stmt->error) . "</div>";
-    }
+    $stmt = $pdo->prepare("UPDATE users_credentials SET firstname = ?, lastname = ?, email = ?, phone = ?, birthdate = ?, address = ? WHERE id = ?");
+    $stmt->execute([$firstname, $lastname, $email, $phone, $birthdate, $address, $user_id]);
+    echo "<script>alert('Profile updated successfully.');</script>";
+    
 }
-$stmt->close();
-$conn->close();
+
+$pdo = null; // Close the PDO connection
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">
@@ -104,6 +128,7 @@ $conn->close();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <link rel="stylesheet">
     <link rel="icon" href="/SnD_Shoppe-main/PIC/sndlogo.png" type="image/png">
@@ -112,7 +137,7 @@ $conn->close();
         @import url('https://fonts.googleapis.com/css2?family=Kumbh+Sans:wght@100..900&family=Playfair+Display+SC:ital,wght@0,400;0,700;0,900;1,400;1,700;1,900&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900&display=swap');
 
 body {
-    background: url(/Assets/images/bgLogin.png) rgba(0, 0, 0, 0.3);
+    background: url(Assets/bgLogin.png) rgba(0, 0, 0, 0.3);
     background-blend-mode: multiply;
     background-position: center;
     background-size: cover;
@@ -121,6 +146,7 @@ body {
     overflow-y: auto; 
     margin: 0; 
     padding: 0; 
+    font-family: "Playfair Display", serif;
 }
     
 .navbar {
@@ -270,6 +296,48 @@ h1 {
     background-color: white; 
 }
 
+#notification-dropdown {
+    position: absolute;
+    top: 70px; /* Adjust as per your layout */
+    right: 20px;
+    width: 500px;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+    display: none; /* Initially hidden */
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+#notification-dropdown li {
+    padding: 10px 16px;
+    color: #333;
+    cursor: pointer;
+}
+
+#notification-dropdown li:hover {
+    background-color: #f1e8d9;
+}
+
+.badge-danger {
+    background-color: #dc3545;
+    color: white;
+    font-size: 14px;
+    padding: 4px 8px;
+    border-radius: 50%;
+}
+#unread-count {
+    display: inline-block; /* Ensures it's visible initially */
+    background: red;
+    color: white;
+    border-radius: 50%;
+    padding: 2px 5px;
+    font-size: 12px;
+    position: absolute;
+    margin-left:-10px;
+  
+}
+
     </style>
 </head>
 <body class="vh-100">
@@ -292,14 +360,23 @@ h1 {
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link nav-link-black" href="#">
-                            <img src="/SnD_Shoppe-main/Assets/svg(icons)/notifications.svg" alt="notif">
+                        <a class="nav-link nav-link-black" href="#" id="notification-icon">
+                            <img src="Assets/svg(icons)/notifications.svg" alt="notif">
+                            <?php if ($unread_count > 0): ?>
+                                <span class="badge badge-danger" id="unread-count"><?php echo $unread_count; ?></span>
+                            <?php endif; ?>
                         </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link nav-link-black" href="#">
-                            <img src="/SnD_Shoppe-main/Assets/svg(icons)/inbox.svg" alt="inbox">
-                        </a>
+                        <ul id="notification-dropdown">
+                            <?php
+                            if (empty($result_notifications)) {
+                                echo '<li>No new notifications</li>';
+                            } else {
+                            foreach ($result_notifications as $notification) {
+                                echo '<li data-notif-id="' . htmlspecialchars($notification['notif_id']) . '">' 
+                                    . htmlspecialchars($notification['message']) . '</br>' . date('m-d-y', strtotime($notification['created_at'])) .'</li>';
+                            } }
+                            ?>
+                        </ul>
                     </li>
                     <!-- New Account Dropdown Menu -->
                     <li class="nav-item dropdown">
@@ -308,11 +385,17 @@ h1 {
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="accountDropdown">
                             <li>
-                                <a class="dropdown-item" href="accountSettings.php">My Account</a>
+                                <a class="dropdown-item" href="mypurchase.php">My Account</a>
                             </li>
                             <li>
                                 <hr class="dropdown-divider">
                             </li>
+                            <li>
+                                <a class="dropdown-item" href="homepage.php">Home</a>
+                                </li>
+                                <li>
+                                    <hr class="dropdown-divider">
+                                </li>
                             <li>
                                 <a class="dropdown-item text-danger" href="logout.php">Logout</a>
                             </li>
@@ -350,7 +433,7 @@ h1 {
         <div class="flex-grow-1 p-4"> 
             
         <div class="container mt-4">
-        <?php if (!empty($message)) echo $message; ?>
+        
 
             <!-- Profile Information -->
             <div class="card mb-4" style="background-color: #f1e8d9;">
@@ -450,6 +533,59 @@ function cancelEdit() {
     // Hide the edit mode and show the regular profile view
     document.getElementById("profile-edit").style.display = "none";
 }
+
+$(document).ready(function () {
+    // Handle notification item click
+    $('#notification-dropdown').on('click', 'li', function () {
+        var notifId = $(this).data('notif-id'); // Get notif_id from the clicked notification
+
+        if (notifId) {
+            // Make an AJAX request to mark the notification as read
+            $.ajax({
+                url: 'homepage.php', // PHP script to handle notification read
+                method: 'GET',
+                data: { notif_id: notifId },
+                success: function (response) {
+                    var result = JSON.parse(response);
+
+                    if (result.status === 'success') {
+                        // Remove the clicked notification
+                        $('li[data-notif-id="' + notifId + '"]').remove();
+
+                        // Update the unread count
+                        var unreadCountElement = $('#unread-count');
+                        var unreadCount = parseInt(unreadCountElement.text(), 10);
+
+                        if (unreadCount > 1) {
+                            unreadCountElement.text(unreadCount - 1);
+                        } else {
+                            unreadCountElement.fadeOut(); // Hide the badge when count reaches 0
+                        }
+                    } else {
+                        console.error('Error: ' + result.message);
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.error('AJAX error:', error);
+                }
+            });
+        }
+    });
+
+    // Toggle notification dropdown visibility
+    $('#notification-icon').on('click', function (e) {
+        e.preventDefault();
+        $('#notification-dropdown').toggle(); // Toggle dropdown visibility
+    });
+
+    // Close dropdown when clicking outside
+    $(document).on('click', function (e) {
+        if (!$('#notification-icon').is(e.target) && $('#notification-icon').has(e.target).length === 0 &&
+            !$('#notification-dropdown').is(e.target) && $('#notification-dropdown').has(e.target).length === 0) {
+            $('#notification-dropdown').hide();
+        }
+    });
+});
 </script>
 </body>
 </html>
