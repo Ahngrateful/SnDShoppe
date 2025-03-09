@@ -28,12 +28,20 @@ $profile_data = $stmt->fetch(PDO::FETCH_ASSOC);
 $customer_name = $profile_data['firstname'] . ' ' . $profile_data['lastname'];
 $address = $profile_data['address'] . ', ' . $profile_data['subdivision'] . ', ' . $profile_data['barangay'] . ', ' . $profile_data['city'] . ', ' . $profile_data['place'];
 
+
+
 $subtotal = 0;
 if (isset($_GET['cart_id'])) {
     $cart_id = intval($_GET['cart_id']);
     
     // Fetch the specific item
-    $stmt = $pdo->prepare('SELECT product_id, cart_id, product, color, unit_price, quantity, total_price FROM shopping_cart WHERE cart_id = :cart_id AND customer_id = :user_id');
+    $stmt = $pdo->prepare("
+    SELECT sc.product_id, sc.cart_id, sc.product, sc.color, sc.color_id, sc.unit_price, sc.quantity, sc.total_price, sc.customer_id,
+           pc.color_id
+    FROM shopping_cart sc
+    JOIN product_colors pc ON sc.color_id = pc.color_id
+    WHERE sc.cart_id = :cart_id AND sc.customer_id = :user_id
+    ");
     $stmt->execute([':cart_id' => $cart_id, ':user_id' => $user_id]);
     $cart_items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -43,7 +51,7 @@ if (isset($_GET['cart_id'])) {
     }
 } else {
     // Fetch all items in the cart by default
-    $stmt = $pdo->prepare('SELECT product_id, cart_id, product, color, unit_price, quantity, total_price FROM shopping_cart WHERE customer_id = :user_id');
+    $stmt = $pdo->prepare('SELECT product_id, cart_id, product, color, color_id, unit_price, quantity, total_price FROM shopping_cart WHERE customer_id = :user_id');
     $stmt->execute([':user_id' => $user_id]);
     $cart_items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -164,29 +172,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
         foreach ($cart_items as $product) {
 
                                     // Check current inventory
-                                    $stmt = $pdo->prepare("SELECT quantity FROM products WHERE product_id = :product_id");
-                                    $stmt->execute([':product_id' => $product['product_id']]);
+                                    $color_id = $product['color_id'] ?? null;
+
+                                    if (!$color_id) {
+                                        throw new Exception("Color ID not found for product {$product['product']}.");
+                                    }
+                                
+                                    // Check inventory
+                                    $stmt = $pdo->prepare("SELECT yards FROM product_colors WHERE color_id = :color_id");
+                                    $stmt->execute([':color_id' => $color_id]);
                                     $current_stock = $stmt->fetchColumn();
-                        
+                                
                                     if ($current_stock === false) {
-                                        throw new Exception("Product ID {$product['product_id']} not found in inventory.");
+                                        throw new Exception("Color ID {$color_id} not found in inventory.");
                                     }
-                        
+                                
                                     if ($current_stock < $product['quantity']) {
-                                        throw new Exception("Insufficient stock for product: {$product['product']}. Available: $current_stock.");
+                                        throw new Exception("Insufficient stock for Color ID {$color_id}. Available: $current_stock.");
                                     }
-                        
-                                    // Subtract quantity from inventory
+                                
+                                    // Update stock
                                     $new_stock = $current_stock - $product['quantity'];
-                                    $stmt = $pdo->prepare("
-                                        UPDATE products 
-                                        SET quantity = :new_stock 
-                                        WHERE product_id = :product_id
-                                    ");
-                                    $stmt->execute([
-                                        ':new_stock' => $new_stock,
-                                        ':product_id' => $product['product_id']
-                                    ]);
+                                    $stmt = $pdo->prepare("UPDATE product_colors SET yards = :new_stock WHERE color_id = :color_id");
+                                    $stmt->execute([':new_stock' => $new_stock, ':color_id' => $color_id]);
+                                
 
                                             // Update product_revenue table
             $stmt = $pdo->prepare("
@@ -236,6 +245,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
                 ':quantity' => $product['quantity']
             ]);
 
+                // Insert notification
+            $message = "Your order #$order_num has been placed successfully. Please wait for your payment confirmation within 12-24 hours. Thank you for shopping with us!";
+            $stmt_notification = $pdo->prepare("INSERT INTO notifications (id, message) VALUES (:id, :message)");
+            $stmt_notification->execute([':id' => $user_id, ':message' => $message]);
+    
         }
         
         $pdo->commit();
@@ -257,7 +271,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
 }
 
 // Fetch unread notifications
-$query_notifications = "SELECT notif_id, message FROM notifications WHERE id = ? AND is_read = 0";
+$query_notifications = "SELECT notif_id, message, created_at FROM notifications WHERE id = ? AND is_read = 0 ORDER BY created_at DESC";
 $stmt_notifications = $pdo->prepare($query_notifications);
 $stmt_notifications->bindValue(1, $user_id, PDO::PARAM_INT);
 $stmt_notifications->execute();
@@ -597,7 +611,7 @@ form .btn-success {
     position: absolute;
     top: 70px; /* Adjust as per your layout */
     right: 20px;
-    width: 200px;
+    width: 500px;
     background-color: white;
     border-radius: 8px;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
@@ -661,7 +675,7 @@ form .btn-success {
                             } else {
                             foreach ($result_notifications as $notification) {
                                 echo '<li data-notif-id="' . htmlspecialchars($notification['notif_id']) . '">' 
-                                    . htmlspecialchars($notification['message']) . '</li>';
+                                    . htmlspecialchars($notification['message']) . '</br>' . date('m-d-y', strtotime($notification['created_at'])) .'</li>';
                             } }
                             ?>
                         </ul>
